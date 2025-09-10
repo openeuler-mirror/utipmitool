@@ -3,6 +3,16 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+/*
+ * SPDX-FileCopyrightText: 2025 UnionTech Software Technology Co., Ltd.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+/*
+ * SPDX-FileCopyrightText: 2025 UnionTech Software Technology Co., Ltd.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 // 对应C结构体的Rust实现
 struct SelOemMsgRec {
     values: [i32; 14],    // 对应value[14]
