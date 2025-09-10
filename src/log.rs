@@ -8,6 +8,11 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+/*
+ * SPDX-FileCopyrightText: 2025 UnionTech Software Technology Co., Ltd.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 use log::{Log, Level, Metadata, Record, SetLoggerError};
 use syslog::{Facility, Formatter3164};
 use std::sync::{Arc, Mutex};
