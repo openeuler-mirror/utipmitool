@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #![allow(dead_code)]
-
 use std::collections::HashMap;
 use std::fmt;
 
