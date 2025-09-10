@@ -8,6 +8,11 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+/*
+ * SPDX-FileCopyrightText: 2025 UnionTech Software Technology Co., Ltd.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 use crate::commands::sdr::iter::SdrIterator;
 use crate::commands::sdr::sdr::*;
 use crate::commands::sdr::types::{SDR_RECORD_TYPE_COMPACT_SENSOR, SDR_RECORD_TYPE_FULL_SENSOR};

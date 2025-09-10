@@ -13,6 +13,11 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+/*
+ * SPDX-FileCopyrightText: 2025 UnionTech Software Technology Co., Ltd.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 use crate::commands::sel::sel::{IPMI_CMD_GET_SEL_ALLOC_INFO, IPMI_CMD_GET_SEL_INFO};
 use crate::error::IpmiError;
 use crate::ipmi::intf::IpmiIntf;

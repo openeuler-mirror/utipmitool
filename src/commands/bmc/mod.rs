@@ -13,6 +13,11 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+/*
+ * SPDX-FileCopyrightText: 2025 UnionTech Software Technology Co., Ltd.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 use ipmi_macros::AsBytes;
 
 pub const BMC_GET_DEVICE_ID: u8 = 0x01;
