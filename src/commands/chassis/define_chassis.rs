@@ -13,6 +13,11 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+/*
+ * SPDX-FileCopyrightText: 2025 UnionTech Software Technology Co., Ltd.
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
 
 pub const CHASSIS_BOOT_MBOX_IANA_SZ: usize = 3;
 pub const CHASSIS_BOOT_MBOX_BLOCK_SZ: usize = 16;
