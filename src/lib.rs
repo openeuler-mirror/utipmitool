@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-//pub mod commands;
+pub mod commands;
 pub mod debug_control;
 pub mod error;
 pub mod helper;
@@ -12,7 +12,7 @@ pub mod helper;
 //pub mod ipmi;
 pub mod logging;
 
-/*
+
 // 在 src/lib.rs 中添加或确认存在
 use std::sync::atomic::AtomicUsize;
 pub static VERBOSE_LEVEL: AtomicUsize = AtomicUsize::new(0);
@@ -108,4 +108,4 @@ macro_rules! debug5 {
 //
 //
 //
-*/
+
