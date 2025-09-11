@@ -1,0 +1,16 @@
+[package]
+name = "unpack"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+#raw_core = { path = "./raw_core"} #就在当前目录
+#raw_derive = { path = "./raw_derive"} #就在当前目录
+#raw_derive = { path = "../raw_derive", optional = true } #就在当前目录
+
+#[features]
+#default = ["raw_derive"] # 默认启用raw_derive特性
+#raw_derive = ["raw_derive"]  # raw_derive特性依赖子crate
+
+[dev-dependencies]
+anyhow = "1.0" # 测试用
