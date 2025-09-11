@@ -22,5 +22,4 @@ pub use raw_core::Endianness;
 //     pub use raw_derive::{RAWDATA};
 // }
 
-//pub use raw_derive::RAWDATA
-//
+pub use raw_derive::RAWDATA;
