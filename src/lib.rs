@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-pub mod commands;
+//pub mod commands;
 pub mod debug_control;
 pub mod error;
 pub mod helper;
