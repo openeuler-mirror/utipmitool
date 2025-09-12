@@ -5,5 +5,5 @@
  */
 pub mod constants;
 pub mod context;
-//pub mod intf;
+pub mod intf;
 pub mod ipmi;
