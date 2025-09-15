@@ -8,3 +8,4 @@ pub mod context;
 pub mod intf;
 pub mod ipmi;
 pub mod time;
+pub mod vita;
