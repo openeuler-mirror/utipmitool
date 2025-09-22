@@ -7,6 +7,7 @@ pub mod constants;
 pub mod context;
 pub mod intf;
 pub mod ipmi;
+//pub mod oem;
 pub mod picmg;
 pub mod strings;
 pub mod time;
