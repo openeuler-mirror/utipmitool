@@ -1,7 +1,5 @@
 # utipmitool - IPMI管理工具
 
-[![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](LICENSE)
-
 一个用于控制支持IPMI设备的命令行工具，基于Rust实现。
 
 ## 功能特性
@@ -48,3 +46,6 @@ src/
 ```
 ### 贡献
 欢迎提交Issue和PR。
+
+## 开源许可证
+utipmitool 在 [Apache-2.0](LICENSE)下发布。

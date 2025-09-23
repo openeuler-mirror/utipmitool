@@ -36,4 +36,4 @@ Software architecture description
 6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
 
 ## License
-utipmitool is licensed under [GPL-2.0-or-later](LICENSE)
+utipmitool is licensed under [Apache-2.0](LICENSE)
