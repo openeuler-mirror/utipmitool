@@ -7,7 +7,7 @@ pub mod commands;
 pub mod debug_control;
 pub mod error;
 pub mod helper;
-//pub mod interface;
+pub mod interface;
 pub mod ipmi;
 pub mod logging;
 
