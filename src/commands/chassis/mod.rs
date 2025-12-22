@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 pub mod common;
 pub mod power;
 pub mod status;
@@ -39,11 +40,18 @@ pub enum ChassisCommand {
     // 修改：指定命令名为 restart_cause，保留 restart-cause 作为别名
     #[command(name = "restart_cause", alias = "restart-cause")]
     RestartCause,
+    // ==== 修改点 BEGIN ====
+    #[command(
+        name = "bootdev",
+        alias = "boot-dev",
+        about = "Set boot device for next boot\n\nSupported devices:\n  none   : Do not change boot device order\n  pxe    : Force PXE boot\n  disk   : Force boot from default Hard-drive\n  safe   : Force boot from default Hard-drive, request Safe Mode\n  diag   : Force boot from Diagnostic Partition\n  cdrom  : Force boot from CD/DVD\n  bios   : Force boot into BIOS Setup\n  floppy : Force boot from Floppy/primary removable media\n\nExample: utipmitool chassis bootdev pxe\n"
+    )]
     BootDev {
-        device: BootDevice,
+        device: Option<BootDevice>,
         #[arg(long)]
         clear_cmos: Option<bool>,
     },
+    // ==== 修改点 END ==== //
 }
 
 // 电源操作
@@ -67,13 +75,21 @@ pub enum PowerAction {
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum BootDevice {
+    /// Do not change boot device order
     None,
+    /// Force PXE boot
     Pxe,
+    /// Force boot from default Hard-drive
     Disk,
+    /// Force boot from default Hard-drive, request Safe Mode
     Safe,
+    /// Force boot from Diagnostic Partition
     Diag,
+    /// Force boot from CD/DVD
     Cdrom,
+    /// Force boot into BIOS Setup
     Bios,
+    /// Force boot from Floppy/primary removable media
     Floppy,
 }
 
@@ -108,7 +124,13 @@ pub fn ipmi_chassis_main(cmd: ChassisCommand, intf: Box<dyn IpmiIntf>) -> Result
         ChassisCommand::Identify { seconds } => ipmi_chassis_identify(intf, seconds),
         ChassisCommand::RestartCause => ipmi_chassis_restart_cause(intf),
         ChassisCommand::BootDev { device, clear_cmos } => {
-            ipmi_chassis_set_bootdev(intf, device, clear_cmos)
+            // ==== 修改点 BEGIN ====
+            if device.is_none() {
+                println!("bootdev <device> [clear-cmos=yes|no]\nbootdev <device> [options=help,...]\n  none  : Do not change boot device order\n  pxe   : Force PXE boot\n  disk  : Force boot from default Hard-drive\n  safe  : Force boot from default Hard-drive, request Safe Mode\n  diag  : Force boot from Diagnostic Partition\n  cdrom : Force boot from CD/DVD\n  bios  : Force boot into BIOS Setup\n  floppy: Force boot from Floppy/primary removable media");
+                return Ok(());
+            }
+            // ==== 修改点 END ==== //
+            ipmi_chassis_set_bootdev(intf, device.unwrap(), clear_cmos)
         }
     }
 }

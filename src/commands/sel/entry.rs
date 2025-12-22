@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 #![allow(dead_code)]
 
 use crate::commands::sel::sel::ipmi_get_event_desc;
@@ -16,86 +17,53 @@ use crate::error::IpmiError;
 use crate::ipmi::intf::IpmiIntf;
 use crate::ipmi::ipmi::IpmiRq;
 use crate::ipmi::ipmi::IPMI_NETFN_STORAGE;
+use std::collections::HashMap;
 use std::error::Error;
 
 // 性能优化：使用静态函数快速查找传感器名称
-pub fn get_sensor_name_fast(sensor_type: u8, sensor_num: u8) -> Option<&'static str> {
-    match (sensor_type, sensor_num) {
-        // x86 架构传感器映射 - 最常见的放在前面
-        (0x0C, 0x5d) => Some("CPU0_B0_Status"), // Memory (x86) - 最频繁
-        (0x0C, 0x61) => Some("CPU0_D0_Status"), // Memory (x86) - 修复ipmitool不一致显示
-        (0x02, 0xa8) => Some("PSU1_Vout"),      // Voltage (x86)
-        (0x04, 0xad) => Some("PSU1_FanSpeed"),  // Fan (x86)
-        (0x10, 0x27) => Some("SEL_FULL"),       // Event Logging Disabled (x86)
-        (0x1D, 0x0b) => Some("BIOS_Boot_Up"),   // System Boot Initiated (x86)
-
-        // ARM 架构传感器映射
-        (0x10, 0x69) => Some("SEL Status"), // Event Logging Disabled (ARM)
-        (0x10, 0x6a) => Some("Op. Log Full"), // Event Logging Disabled (ARM)
-        (0x10, 0x6b) => Some("Sec. Log Full"), // Event Logging Disabled (ARM)
-        (0x17, 0x6e) => Some("RAID0"),      // Add-in Card (ARM)
-        (0x17, 0x62) => Some("RAID Presence"), // Add-in Card (ARM)
-        (0x17, 0x5e) => Some("Riser1 Card"), // Add-in Card (ARM)
-        (0x07, 0x3c) => Some("CPU1 Status"), // Processor (ARM)
-        (0x07, 0x3d) => Some("CPU2 Status"), // Processor (ARM)
-        (0x0C, 0x40) => Some("DIMM000"),    // Memory (ARM)
-        (0x0C, 0x42) => Some("DIMM010"),    // Memory (ARM)
-        (0x0C, 0x48) => Some("DIMM100"),    // Memory (ARM)
-        (0x0C, 0x4a) => Some("DIMM110"),    // Memory (ARM)
-        (0x16, 0x66) => Some("BMC Boot Up"), // Microcontroller (ARM)
-        (0x16, 0x67) => Some("BMC Time Hopping"), // Microcontroller (ARM)
-        (0x21, 0x82) => Some("NIC1-1 Link Down"), // Slot / Connector (ARM)
-        (0x21, 0x83) => Some("NIC1-2 Link Down"), // Slot / Connector (ARM)
-        (0x21, 0x84) => Some("NIC1-3 Link Down"), // Slot / Connector (ARM)
-        (0x21, 0x85) => Some("NIC1-4 Link Down"), // Slot / Connector (ARM)
-        (0x0D, 0x72) => Some("DISK0"),      // Drive Slot / Bay (ARM)
-        (0x0D, 0x73) => Some("DISK1"),      // Drive Slot / Bay (ARM)
-        (0x0D, 0x77) => Some("DISK5"),      // Drive Slot / Bay (ARM)
-        (0x08, 0x86) => Some("PS1 Status"), // Power Supply (ARM)
-        (0x08, 0x89) => Some("PS2 Status"), // Power Supply (ARM)
-        (0x08, 0x59) => Some("PwrOk Sig. Drop"), // Power Supply (ARM)
-        (0x22, 0x51) => Some("ACPI State"), // System ACPI Power State (ARM)
-        (0x06, 0x6d) => Some("Cert OverDue"), // Platform Security (ARM)
-        (0x1D, 0x54) => Some("SysRestart"), // System Boot Initiated (ARM)
-        (0x14, 0x53) => Some("Power Button"), // Button (ARM)
-        (0x01, 0x01) => Some("Inlet Temp"), // Temperature (ARM)
-
-        // LoongArch 架构传感器映射
-        (0x02, 0x30) => Some("PSU1 Out Voltage"), // Voltage (LoongArch)
-        (0x02, 0x31) => Some("PSU2 Out Voltage"), // Voltage (LoongArch)
-        (0x02, 0x37) => Some("VDDP CPU0"),        // Voltage (LoongArch)
-        (0x02, 0x38) => Some("VDDP CPU1"),        // Voltage (LoongArch)
-        (0x02, 0x39) => Some("VDDP CPU2"),        // Voltage (LoongArch)
-        (0x02, 0x3a) => Some("VDDP CPU3"),        // Voltage (LoongArch)
-        (0x02, 0x2e) => Some("MB HT 1V2"),        // Voltage (LoongArch)
-        (0x02, 0x3b) => Some("VDDP CPU0"),        // Voltage (LoongArch)
-        (0x02, 0x3c) => Some("VDDP CPU1"),        // Voltage (LoongArch)
-        (0x02, 0x3d) => Some("VDDP CPU2"),        // Voltage (LoongArch)
-        (0x02, 0x3e) => Some("VDDP CPU3"),        // Voltage (LoongArch)
-
-        // 其他x86传感器 - 不太频繁的放在后面
-        (0x04, 0x91) => Some("FAN1_Present"), // Fan (x86)
-        (0x04, 0x92) => Some("FAN2_Present"), // Fan (x86)
-        (0x04, 0x93) => Some("FAN3_Present"), // Fan (x86)
-        (0x04, 0x94) => Some("FAN4_Present"), // Fan (x86)
-        (0x04, 0x95) => Some("FAN5_Present"), // Fan (x86)
-        (0x04, 0x96) => Some("FAN6_Present"), // Fan (x86)
-        (0x04, 0x97) => Some("FAN7_Present"), // Fan (x86)
-        (0x04, 0x98) => Some("FAN8_Present"), // Fan (x86)
-        (0x22, 0x25) => Some("PWR_State"),    // System ACPI Power State (x86)
-        (0x07, 0x2f) => Some("CPU0_Status"),  // Processor (x86)
-        (0x08, 0xae) => Some("PSU1_Status"),  // Power Supply (x86)
-        (0x08, 0xbb) => Some("PSU2_Status"),  // Power Supply (x86)
-        (0x0D, 0xde) => Some("HDD0_Status"),  // Drive Slot / Bay (x86)
-        (0x0D, 0xdf) => Some("HDD1_Status"),  // Drive Slot / Bay (x86)
-        (0x0D, 0xe0) => Some("HDD2_Status"),  // Drive Slot / Bay (x86)
-        (0x0D, 0xe1) => Some("HDD3_Status"),  // Drive Slot / Bay (x86)
-
-        // LoongArch 架构传感器映射
-        (0x02, 0x48) => Some("VPP MC13 CPU0"), // Voltage (LoongArch) - 关键映射！
-
-        _ => None,
+pub fn get_sensor_name_fast(
+    sensor_type: u8,
+    sensor_num: u8,
+    gen_id: u16,
+    sdr_cache: &HashMap<(u16, u8, u8), crate::commands::sdr::sdradd::SdrRecord>,
+) -> Option<String> {
+    // 为保证跨架构一致性，不再使用静态架构映射；只依据真实 SDR。
+    // ipmitool 使用 gen_id -> owner_id 的低8位匹配；这里模拟多种可能。
+    let owner_id_candidates = [gen_id & 0xFF, gen_id];
+    for oid in owner_id_candidates {
+        if let Some(r) = sdr_cache.get(&(oid, sensor_num, sensor_type)) {
+            // 优先解析 Full 记录，其次 Compact
+            if let Ok(full) = crate::commands::sdr::sdr::SdrRecordFullSensor::from_le_bytes(&r.raw)
+            {
+                let raw = String::from_utf8_lossy(&full.id_string)
+                    .trim_end_matches('\0')
+                    .trim()
+                    .to_string();
+                if !raw.is_empty() {
+                    // 特殊处理风扇：如果名称包含 PWM 等附加修饰，ipmitool 在实际输出中常使用 Fan #0xNN
+                    if sensor_type == 0x04 && raw.to_ascii_lowercase().contains("pwm") {
+                        return None; // 强制回退为通用名字 + 编号
+                    }
+                    return Some(raw);
+                }
+            }
+            if let Ok(compact) =
+                crate::commands::sdr::sdr::SdrRecordCompactSensor::from_le_bytes(&r.raw)
+            {
+                let raw = String::from_utf8_lossy(&compact.id_string)
+                    .trim_end_matches('\0')
+                    .trim()
+                    .to_string();
+                if !raw.is_empty() {
+                    if sensor_type == 0x04 && raw.to_ascii_lowercase().contains("pwm") {
+                        return None;
+                    }
+                    return Some(raw);
+                }
+            }
+        }
     }
+    None // 回退逻辑由调用方处理
 }
 pub struct OemDetails {
     record_type: u8,
@@ -219,24 +187,8 @@ impl SelEntry {
                 };
                 //if sel_extended
                 if extend {
-                    // 扩展模式：根据传感器类型和编号返回传感器名称（基于实际观察的映射）
-                    let sensor_type_name = ipmi_get_sensor_type(intf, standard.sensor_type);
-                    let sensor_name =
-                        get_sensor_name_fast(standard.sensor_type, standard.sensor_num);
-
-                    out.sensor_info = if let Some(name) = sensor_name {
-                        Some(format!("{} {}", sensor_type_name, name))
-                    } else {
-                        // 修复：只有当sensor_num不为0时才显示#0x{:02x}，与ipmitool保持一致
-                        if standard.sensor_num != 0 {
-                            Some(format!(
-                                "{} #0x{:02x}",
-                                sensor_type_name, standard.sensor_num
-                            ))
-                        } else {
-                            Some(sensor_type_name.to_string())
-                        }
-                    };
+                    // 传感器信息格式化逻辑已移至 sel.rs 的 print_sel_entry_fast,
+                    // 此处不再处理，以避免代码重复和逻辑混乱。
                 } else {
                     // 标准模式：使用十六进制编号格式，但sensor_num为0时不显示#0x00
                     let sensor_type_name = ipmi_get_sensor_type(intf, standard.sensor_type);

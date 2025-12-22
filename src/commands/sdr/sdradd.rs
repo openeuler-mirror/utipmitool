@@ -3,7 +3,6 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-use ipmi_macros::AsBytes;
 
 use crate::commands::sdr::iter::SdrIterator;
 use crate::commands::sdr::sdr::SdrRecordHeader;
@@ -99,7 +98,6 @@ impl<'a> SdrIterator<'a> {
     }
 }
 
-#[derive(AsBytes)]
 #[repr(C)]
 pub struct SdrAddRq {
     pub reserve_id: u16, /* reservation ID */
@@ -107,6 +105,21 @@ pub struct SdrAddRq {
     pub offset: u8,      /* offset into SDR */
     pub in_progress: u8, /* 0=partial, 1=last */
                          //    data: [u8; 1],        /* SDR record data */
+}
+
+impl SdrAddRq {
+    pub fn as_bytes(&self) -> [u8; 6] {
+        let reserve_id_bytes = self.reserve_id.to_le_bytes();
+        let id_bytes = self.id.to_le_bytes();
+        [
+            reserve_id_bytes[0],
+            reserve_id_bytes[1],
+            id_bytes[0],
+            id_bytes[1],
+            self.offset,
+            self.in_progress,
+        ]
+    }
 }
 
 /// 添加 SDR 记录到仓库
@@ -144,19 +157,19 @@ pub fn ipmi_sdr_add_record(intf: &mut dyn IpmiIntf, sdr: &SdrRecord) -> bool {
 
     {
         //作用域用来释放as_bytes引用
-        let rq = sdr_rq.as_bytes();
-        let header = sdr.header.as_bytes();
+        let rq_bytes = sdr_rq.as_bytes();
+        let header_bytes = sdr.header.as_bytes();
 
         // 将 sdr_rq 复制到 buffer 的起始位置
-        buffer[..rq.len()].copy_from_slice(rq);
+        buffer[..rq_bytes.len()].copy_from_slice(&rq_bytes);
         // 将 data 复制到 buffer 的后续位置
-        buffer[rq.len()..rq.len() + header.len()].copy_from_slice(header);
+        buffer[rq_bytes.len()..rq_bytes.len() + header_bytes.len()].copy_from_slice(&header_bytes);
 
         req.msg.netfn_mut(IPMI_NETFN_STORAGE);
         req.msg.cmd = ADD_PARTIAL_SDR;
 
         req.msg.data = buffer.as_mut_ptr();
-        req.msg.data_len = (rq.len() + header.len()) as u16;
+        req.msg.data_len = (rq_bytes.len() + header_bytes.len()) as u16;
     }
     match partial_send(intf, &req) {
         Ok(next_id) => {
@@ -184,13 +197,13 @@ pub fn ipmi_sdr_add_record(intf: &mut dyn IpmiIntf, sdr: &SdrRecord) -> bool {
         //rq变化后要重新复制到buffer
         {
             // 每次循环生成新的rq引用
-            let rq = sdr_rq.as_bytes();
-            buffer[..rq.len()].copy_from_slice(rq);
+            let rq_bytes = sdr_rq.as_bytes();
+            buffer[..rq_bytes.len()].copy_from_slice(&rq_bytes);
             let index = i as usize;
-            buffer[rq.len()..rq.len() + data_len as usize]
+            buffer[rq_bytes.len()..rq_bytes.len() + data_len as usize]
                 .copy_from_slice(&sdr.raw[index..index + data_len as usize]);
             //memcpy(sdr_rq->data, sdrr->raw + i, data_len);
-            req.msg.data_len = data_len as u16 + rq.len() as u16;
+            req.msg.data_len = data_len as u16 + rq_bytes.len() as u16;
         }
         match partial_send(intf, &req) {
             Ok(next_id) => {

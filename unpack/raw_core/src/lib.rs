@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Endianness {
     Little,

@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 // 对应C结构体的Rust实现
 struct SelOemMsgRec {
     values: [i32; 14],    // 对应value[14]

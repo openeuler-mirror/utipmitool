@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 // struct ipmi_oem_handle {
 // 	const char * name;
 // 	const char * desc;

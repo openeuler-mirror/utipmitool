@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+
 impl IpmiContext {
         //TODO:ssn_params
     pub fn session_set_hostname(&mut self, hostname: String) {

@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 #![allow(dead_code)]
 
 use crate::commands::mc::{IpmDevidRsp, BMC_GET_DEVICE_ID};
@@ -127,7 +128,7 @@ impl<'a> SdrIterator<'a> {
             }
             let sdr_info = SdrRepoInfoRs::from_le_bytes(rsp.data.as_slice()).unwrap();
 
-            debug4!("sdr_info      = {:02x?}", sdr_info.as_bytes());
+            debug4!("sdr_info      = {:02x?}", rsp.data.as_slice());
 
             // IPMIv1.0 == 0x01, IPMIv1.5 == 0x51, IPMIv2.0 == 0x02
             if ![0x51, 0x01, 0x02].contains(&sdr_info.version) {
@@ -167,10 +168,9 @@ impl<'a> SdrIterator<'a> {
                 }
             };
 
-            let mut sdr_info = SdrRepoInfoRs::default();
-            let bytes = sdr_info.as_bytes_mut();
+            let bytes = &rsp.data[..std::mem::size_of::<SdrRepoInfoRs>()];
+            let sdr_info = SdrRepoInfoRs::from_le_bytes(bytes).unwrap();
 
-            bytes.copy_from_slice(&rsp.data[..bytes.len()]);
             iter.total = sdr_info.count as i32;
             iter.next_id = 0;
             debug3!("SDR records   :{}", sdr_info.count);
@@ -213,7 +213,7 @@ impl<'a> SdrIterator<'a> {
         };
 
         req.msg.data_len = std::mem::size_of::<SdrGetRq>() as u16;
-        req.msg.data = sdr_rq.as_mut_ptr() as *mut u8;
+        req.msg.data = &mut sdr_rq as *mut _ as *mut u8;
         for _ in 0..5 {
             sdr_rq.reserve_id = self.reservation_id;
             match self.intf.sendrecv(&req) {
@@ -319,7 +319,7 @@ impl<'a> SdrIterator<'a> {
             },
         };
 
-        req.msg.data = sdr_rq.as_mut_ptr() as *mut u8;
+        req.msg.data = &mut sdr_rq as *mut _ as *mut u8;
         req.msg.data_len = std::mem::size_of::<SdrGetRq>() as u16;
 
         //未初始化,则初始化

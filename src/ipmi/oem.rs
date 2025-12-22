@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use crate::commands::mc::{IpmDevidRsp, BMC_GET_DEVICE_ID};
 use crate::error::IpmiError;
 use crate::helper::ipmi24toh;

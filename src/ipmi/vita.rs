@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use crate::debug1;
 use crate::debug2;
 use crate::error::IpmiError;

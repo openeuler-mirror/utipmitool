@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+
 pub const CHASSIS_BOOT_MBOX_IANA_SZ: usize = 3;
 pub const CHASSIS_BOOT_MBOX_BLOCK_SZ: usize = 16;
 pub const CHASSIS_BOOT_MBOX_BLOCK0_SZ: usize = CHASSIS_BOOT_MBOX_BLOCK_SZ - CHASSIS_BOOT_MBOX_IANA_SZ;

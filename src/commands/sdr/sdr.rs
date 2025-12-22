@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 #![allow(dead_code)]
 
 use crate::debug3; // 添加debug3宏导入
@@ -16,8 +17,6 @@ use crate::commands::sdr::iter::SdrIterator;
 use crate::commands::sdr::sdradd::*;
 use crate::commands::sdr::*;
 use crate::commands::sensor::sensor::*;
-
-use unpack::RAWDATA;
 
 static mut USE_BUILT_IN: bool = false; /* Uses DeviceSDRs instead of SDRR */
 static mut SDR_MAX_READ_LEN: i32 = 0;
@@ -404,7 +403,7 @@ pub fn ipmi_sdr_get_reservation(intf: &mut dyn IpmiIntf, use_builtin: bool) -> O
 }
 
 #[repr(C)]
-#[derive(Debug, Default, AsBytes)]
+#[derive(Debug, Default)]
 pub struct SdrGetRq {
     pub reserve_id: u16, // reservation ID
     pub id: u16,         // record ID
@@ -412,20 +411,57 @@ pub struct SdrGetRq {
     pub length: u8,      // length to read
 }
 
-#[derive(Debug, Default, AsBytes)]
+#[derive(Debug, Default)]
 #[repr(C)]
 pub struct SdrGetRs {
     pub next: u16,               // next record id
     pub header: SdrRecordHeader, // record header
 }
 
+impl SdrGetRs {
+    pub fn from_le_bytes(data: &[u8]) -> Result<Self, &'static str> {
+        if data.len() < std::mem::size_of::<Self>() {
+            return Err("Input data too short for SdrGetRs");
+        }
+        Ok(Self {
+            next: u16::from_le_bytes([data[0], data[1]]),
+            header: SdrRecordHeader::from_le_bytes(&data[2..])?,
+        })
+    }
+}
+
 #[repr(C)]
-#[derive(Debug, Default, AsBytes, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SdrRecordHeader {
     pub id: u16,         // record ID
     pub version: u8,     // SDR version (51h)
     pub record_type: u8, // record type
     pub length: u8,      // remaining record bytes
+}
+
+impl SdrRecordHeader {
+    pub fn from_le_bytes(data: &[u8]) -> Result<Self, &'static str> {
+        if data.len() < std::mem::size_of::<Self>() {
+            return Err("Input data too short for SdrRecordHeader");
+        }
+        Ok(Self {
+            id: u16::from_le_bytes([data[0], data[1]]),
+            version: data[2],
+            record_type: data[3],
+            length: data[4],
+        })
+    }
+
+    pub fn as_bytes(&self) -> [u8; 5] {
+        let id_bytes = self.id.to_le_bytes();
+        [
+            id_bytes[0],
+            id_bytes[1],
+            self.version,
+            self.record_type,
+            self.length,
+        ]
+    }
 }
 
 pub const SDR_RECORD_TYPE_FULL_SENSOR: u8 = 0x01;
@@ -493,7 +529,7 @@ fn to_b_exp(bacc: u32) -> i32 {
     tos32((bswap_32(bacc) & 0xf) as i32, 4)
 }
 
-#[derive(Debug, Default, AsBytes)]
+#[derive(Debug, Default)]
 #[repr(C)]
 pub struct SdrRepoInfoRs {
     pub version: u8,      // SDR version (51h)
@@ -504,7 +540,23 @@ pub struct SdrRepoInfoRs {
     pub op_support: u8,   // supported operations
 }
 
-#[derive(Debug, AsBytes)]
+impl SdrRepoInfoRs {
+    pub fn from_le_bytes(data: &[u8]) -> Result<Self, &'static str> {
+        if data.len() < std::mem::size_of::<Self>() {
+            return Err("Input data too short for SdrRepoInfoRs");
+        }
+        Ok(Self {
+            version: data[0],
+            count: u16::from_le_bytes([data[1], data[2]]),
+            free: u16::from_le_bytes([data[3], data[4]]),
+            add_stamp: u32::from_le_bytes([data[5], data[6], data[7], data[8]]),
+            erase_stamp: u32::from_le_bytes([data[9], data[10], data[11], data[12]]),
+            op_support: data[13],
+        })
+    }
+}
+
+#[derive(Debug)]
 #[repr(C)]
 pub struct SdrRecordCompactSensor {
     pub cmn: SdrRecordCommonSensor,
@@ -516,7 +568,7 @@ pub struct SdrRecordCompactSensor {
     pub id_string: [u8; 16],
 }
 
-#[derive(Debug, RAWDATA)]
+#[derive(Debug)]
 #[repr(C)]
 pub struct SdrRecordFullSensor {
     pub cmn: SdrRecordCommonSensor,
@@ -536,23 +588,41 @@ pub struct SdrRecordFullSensor {
     pub id_string: [u8; 16], // sensor ID string bytes
 }
 
-// impl ::unpack::RawSize  for RawSdrRecordFullSensor {
-
-// }
-
 impl SdrRecordFullSensor {
     pub fn from_le_bytes(data: &[u8]) -> Result<Self, &'static str> {
-        // 检查最小长度 (不包括id_string的16字节)
-        const MIN_SIZE: usize = <SdrRecordFullSensor as ::unpack::RawSize>::RAW_SIZE - 16;
-        if data.len() < MIN_SIZE {
-            return Err("Input data too short for SdrRecordFullSensor");
+        // 结构体固定部分的大小（不包括 id_string）
+        const FIXED_PART_SIZE: usize = std::mem::size_of::<SdrRecordCommonSensor>() // 8
+            + 1  // linearization
+            + 2  // mtol
+            + 4  // bacc
+            + 1  // analog_flag
+            + 1  // nominal_read
+            + 1  // normal_max
+            + 1  // normal_min
+            + 1  // sensor_max
+            + 1  // sensor_min
+            + std::mem::size_of::<SdrThresholds>() // 12
+            + 2  // reserved
+            + 1  // oem
+            + 1; // id_code
+
+        if data.len() < FIXED_PART_SIZE {
+            return Err("Input data too short for SdrRecordFullSensor fixed part");
         }
 
         let mut offset = 0;
 
         // 反序列化固定长度部分
         let cmn = SdrRecordCommonSensor::from_le_bytes(&data[offset..])?;
-        offset += <SdrRecordCommonSensor as ::unpack::RawSize>::RAW_SIZE;
+        let parsed_common_len = std::mem::size_of::<SdrRecordCommonSensor>();
+        let wire_common_len = 18usize; // IPMI规范线长
+        offset += parsed_common_len;
+        if parsed_common_len > wire_common_len {
+            let padding = parsed_common_len - wire_common_len;
+            offset -= padding; // 回退补偿填充
+        } else {
+            // 调试输出已移除
+        }
 
         let linearization = data[offset];
         offset += 1;
@@ -587,7 +657,7 @@ impl SdrRecordFullSensor {
         offset += 1;
 
         let threshold = SdrThresholds::from_le_bytes(&data[offset..])?;
-        offset += <SdrThresholds as ::unpack::RawSize>::RAW_SIZE;
+        offset += std::mem::size_of::<SdrThresholds>();
 
         let reserved = [data[offset], data[offset + 1]];
         offset += 2;
@@ -598,22 +668,36 @@ impl SdrRecordFullSensor {
         let id_code = data[offset];
         offset += 1;
 
-        // 处理id_string (可能不完整)
-        let id_len = (id_code & 0x1F) as usize; // 取低5位作为长度
-        let mut id_string = [0u8; 16];
-
-        // 检查剩余数据是否足够
-        let remaining_data = if offset <= data.len() {
-            &data[offset..]
+        // **校验与纠偏 (Full Sensor)** 如果高2位不是0b11 (8-bit ASCII)，则可能偏移错误，尝试回退一字节
+        let mut effective_id_code = id_code;
+        let mut id_string_start = offset; // 默认id_string起始
+        if (id_code & 0xC0) != 0xC0 {
+            if offset >= 2 {
+                // 保证可以回退
+                let prev = data[offset - 2];
+                if (prev & 0xC0) == 0xC0 {
+                    // 前一字节更像id_code
+                    effective_id_code = prev;
+                    id_string_start = offset - 1; // 当前读取的字节其实是名称首字节
+                } else {
+                    // 调试输出已移除
+                }
+            } else {
+                // 调试输出已移除
+            }
         } else {
-            &[]
-        };
-
-        // 复制有效数据部分
-        let copy_len = id_len.min(16).min(remaining_data.len());
-        if copy_len > 0 {
-            id_string[..copy_len].copy_from_slice(&remaining_data[..copy_len]);
+            // 调试输出已移除
         }
+        // 计算长度并拷贝id_string
+        let id_len = (effective_id_code & 0x1F) as usize;
+        let mut id_string = [0u8; 16];
+        let remaining_len = data.len().saturating_sub(id_string_start);
+        let copy_len = id_len.min(16).min(remaining_len);
+        if copy_len > 0 {
+            id_string[..copy_len]
+                .copy_from_slice(&data[id_string_start..id_string_start + copy_len]);
+        }
+        // 调试输出已移除
 
         Ok(Self {
             cmn,
@@ -629,7 +713,7 @@ impl SdrRecordFullSensor {
             threshold,
             reserved,
             oem,
-            id_code,
+            id_code: effective_id_code,
             id_string,
         })
     }
@@ -701,27 +785,102 @@ impl SdrRecordFullSensor {
 }
 
 impl SdrRecordCompactSensor {
-    // pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-    //     if bytes.len() < std::mem::size_of::<Self>() {
-    //         return None;
-    //     }
+    pub fn from_le_bytes(data: &[u8]) -> Result<Self, &'static str> {
+        // 结构体固定部分的大小（不包括 id_string）
+        const FIXED_PART_SIZE: usize = std::mem::size_of::<SdrRecordCommonSensor>() // 8
+            + std::mem::size_of::<SdrCompactShare>()     // 2
+            + std::mem::size_of::<SdrCompactThreshold>() // 2
+            + 3  // reserved
+            + 1  // oem
+            + 1; // id_code
 
-    //     // Safety: The struct is #[repr(packed)] and we've verified the length
-    //     unsafe {
-    //         let ptr = bytes.as_ptr() as *const Self;
-    //         Some(ptr.read_unaligned())
-    //     }
-    // }
+        if data.len() < FIXED_PART_SIZE {
+            return Err("Input data too short for SdrRecordCompactSensor fixed part");
+        }
+
+        let mut offset = 0;
+
+        let cmn = SdrRecordCommonSensor::from_le_bytes(&data[offset..])?;
+        let parsed_common_len = std::mem::size_of::<SdrRecordCommonSensor>();
+        let wire_common_len = 18usize;
+        offset += parsed_common_len;
+        if parsed_common_len > wire_common_len {
+            let padding = parsed_common_len - wire_common_len;
+            offset -= padding;
+            // 调试输出已移除
+        } else {
+            // 调试输出已移除
+        }
+
+        let share = SdrCompactShare::from_le_bytes(&data[offset..])?;
+        offset += std::mem::size_of::<SdrCompactShare>();
+
+        let threshold = SdrCompactThreshold::from_le_bytes(&data[offset..])?;
+        offset += std::mem::size_of::<SdrCompactThreshold>();
+
+        let reserved = [data[offset], data[offset + 1], data[offset + 2]];
+        offset += 3;
+
+        let oem = data[offset];
+        offset += 1;
+
+        let id_code = data[offset];
+        offset += 1;
+
+        // **校验与纠偏 (Compact Sensor)** 与Full相同逻辑
+        let mut effective_id_code = id_code;
+        let mut id_string_start = offset;
+        if (id_code & 0xC0) != 0xC0 {
+            if offset >= 2 {
+                let prev = data[offset - 2];
+                if (prev & 0xC0) == 0xC0 {
+                    effective_id_code = prev;
+                    id_string_start = offset - 1;
+                } else {
+                    // 调试输出已移除
+                }
+            } else {
+                // 调试输出已移除
+            }
+        } else {
+            // 调试输出已移除
+        }
+        let id_len = (effective_id_code & 0x1F) as usize;
+        let mut id_string = [0u8; 16];
+        let remaining_len = data.len().saturating_sub(id_string_start);
+        let copy_len = id_len.min(16).min(remaining_len);
+        if copy_len > 0 {
+            id_string[..copy_len]
+                .copy_from_slice(&data[id_string_start..id_string_start + copy_len]);
+        }
+        // 调试输出已移除
+
+        Ok(Self {
+            cmn,
+            share,
+            threshold,
+            reserved,
+            oem,
+            id_code: effective_id_code,
+            id_string,
+        })
+    }
 }
 
 #[repr(C)]
-#[derive(Debug, Default, AsBytes)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct SdrCompactShare {
     bits: u16,
-    //pub count_mod_type: u8,     // bits 0-3: count, bits 4-5: mod_type, bits 6-7: reserved
-    //pub mod_offset_entity: u8,  // bits 0-6: mod_offset, bit 7: entity_inst
 }
 impl SdrCompactShare {
+    pub fn from_le_bytes(data: &[u8]) -> Result<Self, &'static str> {
+        if data.len() < 2 {
+            return Err("Input data too short for SdrCompactShare");
+        }
+        Ok(SdrCompactShare {
+            bits: u16::from_le_bytes([data[0], data[1]]),
+        })
+    }
     // count: bits[0..3] (4 bits)
     pub fn count(&self) -> u8 {
         (self.bits & 0x000F) as u8
@@ -758,14 +917,28 @@ impl SdrCompactShare {
         self.bits = (self.bits & !0x8000) | ((val as u16) << 15);
     }
 }
-#[repr(C)] //#[derive(Debug, Default, AsBytes)]
-#[derive(Debug, Default, AsBytes)]
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct SdrCompactThreshold {
     pub hysteresis: SdrHysteresis,
 }
 
+impl SdrCompactThreshold {
+    pub fn from_le_bytes(data: &[u8]) -> Result<Self, &'static str> {
+        if data.len() < 2 {
+            return Err("Input data too short for SdrCompactThreshold");
+        }
+        Ok(SdrCompactThreshold {
+            hysteresis: SdrHysteresis {
+                positive: data[0],
+                negative: data[1],
+            },
+        })
+    }
+}
+
 #[repr(C)]
-#[derive(Debug, Default, AsBytes)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct SdrHysteresis {
     pub positive: u8,
     pub negative: u8,
@@ -886,27 +1059,33 @@ pub fn ipmi_sdr_read_sensor_value(
         //full=59bytes,实际返回52,可能最后id_string的16个字节没有被填充
         SDR_RECORD_TYPE_FULL_SENSOR => match SdrRecordFullSensor::from_le_bytes(sensor_raw) {
             Ok(s) => {
+                // 需要可变以便可能调整 id_string
                 let mut idlen = (s.id_code & 0x1f) as usize;
-
-                // 如果 id_code 长度为 0，尝试从 id_string 中找到实际长度
                 if idlen == 0 {
-                    // 查找 id_string 中的有效字符长度（到第一个 null 字符或非打印字符）
                     for i in 0..16 {
                         if s.id_string[i] == 0 || s.id_string[i] < 0x20 || s.id_string[i] > 0x7e {
                             idlen = i;
                             break;
                         }
                         if i == 15 {
-                            // 检查是否所有字符都是可打印字符
                             if s.id_string.iter().all(|&b| (0x20..=0x7e).contains(&b)) {
                                 idlen = 16;
                             } else {
-                                idlen = 0; // 如果有非可打印字符，认为名称无效
+                                idlen = 0;
                             }
                         }
                     }
                 }
-
+                let _effective_id_code = if (s.id_code & 0xC0) != 0xC0 {
+                    if idlen > 0 {
+                        idlen -= 1;
+                        s.id_code
+                    } else {
+                        s.id_code
+                    }
+                } else {
+                    s.id_code
+                };
                 idlen = idlen.min(sr.s_id.len() - 1).min(16);
                 if idlen > 0 {
                     sr.s_id[..idlen].copy_from_slice(&s.id_string[..idlen]);
@@ -921,26 +1100,31 @@ pub fn ipmi_sdr_read_sensor_value(
         SDR_RECORD_TYPE_COMPACT_SENSOR => match SdrRecordCompactSensor::from_le_bytes(sensor_raw) {
             Ok(s) => {
                 let mut idlen = (s.id_code & 0x1f) as usize;
-
-                // 如果 id_code 长度为 0，尝试从 id_string 中找到实际长度
                 if idlen == 0 {
-                    // 查找 id_string 中的有效字符长度（到第一个 null 字符或非打印字符）
                     for i in 0..16 {
                         if s.id_string[i] == 0 || s.id_string[i] < 0x20 || s.id_string[i] > 0x7e {
                             idlen = i;
                             break;
                         }
                         if i == 15 {
-                            // 检查是否所有字符都是可打印字符
                             if s.id_string.iter().all(|&b| (0x20..=0x7e).contains(&b)) {
                                 idlen = 16;
                             } else {
-                                idlen = 0; // 如果有非可打印字符，认为名称无效
+                                idlen = 0;
                             }
                         }
                     }
                 }
-
+                let _effective_id_code = if (s.id_code & 0xC0) != 0xC0 {
+                    if idlen > 0 {
+                        idlen -= 1;
+                        s.id_code
+                    } else {
+                        s.id_code
+                    }
+                } else {
+                    s.id_code
+                };
                 idlen = idlen.min(sr.s_id.len() - 1).min(16);
                 if idlen > 0 {
                     sr.s_id[..idlen].copy_from_slice(&s.id_string[..idlen]);
