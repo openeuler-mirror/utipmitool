@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 mod cli;
 use clap::Parser;
 use cli::{Cli, InterfaceType, MainCommand};

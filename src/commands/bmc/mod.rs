@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use ipmi_macros::AsBytes;
 
 pub const BMC_GET_DEVICE_ID: u8 = 0x01;

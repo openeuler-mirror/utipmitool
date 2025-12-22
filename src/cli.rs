@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 #![allow(clippy::upper_case_acronyms)]
 #![allow(dead_code)]
 
@@ -76,7 +77,7 @@ pub enum AuthType {
 #[derive(Parser, Debug)]
 #[command(
     name = "utipmitool",
-    version = "0.9.0",
+    version = "1.0.0",
     about = "IPMI management utility",
     max_term_width = 100,
     disable_help_flag = true,

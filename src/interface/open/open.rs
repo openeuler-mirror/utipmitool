@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use crate::error::{IpmiError, IpmiResult};
 use crate::ipmi::intf::{IpmiContext, IpmiIntf};
 use crate::ipmi::ipmi::*;

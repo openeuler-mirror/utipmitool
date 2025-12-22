@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 #[allow(clippy::module_inception)]
 pub mod open;
 

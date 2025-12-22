@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use crate::ipmi::intf::*;
 use crate::ipmi::ipmi::*;
 use crate::VERBOSE_LEVEL;

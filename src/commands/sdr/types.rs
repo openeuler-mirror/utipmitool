@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use crate::error::{IpmiError, IpmiResult};
 use crate::ipmi::context::OutputContext;
 use std::time::UNIX_EPOCH;
@@ -58,22 +59,14 @@ impl SdrRepositoryInfo {
 
         output.push_str("Most recent Addition                : ");
         if self.partial_add_sdr_supported() {
-            if self.recent_addition != 0 {
-                output.push_str(&format!("{}\n", format_timestamp(self.recent_addition)));
-            } else {
-                output.push_str("NA\n");
-            }
+            output.push_str(&format!("{}\n", format_timestamp(self.recent_addition)));
         } else {
             output.push_str("NA\n");
         }
 
         output.push_str("Most recent Erase                   : ");
         if self.delete_sdr_supported() {
-            if self.recent_erase != 0 {
-                output.push_str(&format!("{}\n", format_timestamp(self.recent_erase)));
-            } else {
-                output.push_str("NA\n");
-            }
+            output.push_str(&format!("{}\n", format_timestamp(self.recent_erase)));
         } else {
             output.push_str("NA\n");
         }
@@ -241,7 +234,7 @@ impl SdrRepositoryInfo {
 /// Format UNIX timestamp to readable string (matching C version)
 fn format_timestamp(timestamp: u32) -> String {
     if timestamp == 0 {
-        return "NA".to_string();
+        return String::new();
     }
 
     match UNIX_EPOCH.checked_add(std::time::Duration::from_secs(timestamp as u64)) {

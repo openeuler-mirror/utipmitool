@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 pub const IPMI_GET_SDR_REPOSITORY_INFO: u8 = 0x20;
 pub const IPMI_SOL_ACTIVATING: u8 = 0x20;
 pub const IPMI_SET_SOL_CONFIG_PARAMETERS: u8 = 0x21;

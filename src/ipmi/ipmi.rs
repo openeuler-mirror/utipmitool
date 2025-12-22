@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use ipmi_macros::DataAccess;
 use std::convert::TryFrom;
 //ipmi.h,->base，还是common

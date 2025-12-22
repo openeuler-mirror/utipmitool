@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 /// IPMI Authentication Implementation
 ///
 /// Based on reference/ipmitool-c/src/plugins/lan/auth.c and auth.h

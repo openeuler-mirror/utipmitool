@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use std::ffi::CString;
 use std::io::{self, Write};
 use std::ptr;

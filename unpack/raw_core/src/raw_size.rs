@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use crate::Endianness;
 use std::error::Error;
 use std::mem::MaybeUninit;

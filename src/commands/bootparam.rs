@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 use crate::commands::chassis::{MBOX_PARSE_ALLBLOCKS, MBOX_PARSE_USE_TEXT};
 use crate::commands::CommandResult;
 use crate::error::IpmiError;

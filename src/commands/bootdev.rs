@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 #![allow(unexpected_cfgs)]
 use crate::commands::CommandResult;
 use crate::error::IpmiError;

@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 #![allow(dead_code)]
 #![allow(clippy::if_same_then_else)]
 
@@ -475,21 +476,27 @@ fn print_sel_entry_fast(
         print!("{} | {} | ", date_str, time_str);
     }
 
-    // 传感器信息
-    let sensor_type_name = ipmi_get_sensor_type(intf, standard.sensor_type);
+    // 传感器信息和事件描述
+    let standard = StandardSpecSelRec::from(&entry.data);
+
+    let mut sdr_name_found = false;
     if extend {
-        if let Some(name) = get_sensor_name_fast(standard.sensor_type, standard.sensor_num) {
-            print!("{} {} | ", sensor_type_name, name);
-        } else {
-            // 修复：只有当sensor_num不为0时才显示#0x{:02x}，与ipmitool保持一致
-            if standard.sensor_num != 0 {
-                print!("{} #0x{:02x} | ", sensor_type_name, standard.sensor_num);
-            } else {
-                print!("{} | ", sensor_type_name);
-            }
+        if let Some(sdr_name) = get_sensor_name_fast(
+            standard.sensor_type,
+            standard.sensor_num,
+            standard.gen_id,
+            sdr_cache,
+        ) {
+            // 成功从SDR获取名称，现在拼接传感器类型和名称以匹配ipmitool
+            let sensor_type_name = ipmi_get_sensor_type(intf, standard.sensor_type);
+            print!("{} {} | ", sensor_type_name, sdr_name);
+            sdr_name_found = true;
         }
-    } else {
-        // 修复：只有当sensor_num不为0时才显示#0x{:02x}，与ipmitool保持一致
+    }
+
+    if !sdr_name_found {
+        // SDR未找到，或不在extend模式，回退到十六进制
+        let sensor_type_name = ipmi_get_sensor_type(intf, standard.sensor_type);
         if standard.sensor_num != 0 {
             print!("{} #0x{:02x} | ", sensor_type_name, standard.sensor_num);
         } else {
@@ -497,7 +504,7 @@ fn print_sel_entry_fast(
         }
     }
 
-    // 事件描述（简化）
+    // 总是获取并打印标准事件描述
     let rec = SelEventRecord {
         record_id: entry.record_id,
         record_type: entry.record_type,
@@ -505,18 +512,15 @@ fn print_sel_entry_fast(
             standard_type: standard,
         },
     };
-
-    // 事件描述和状态
     if let Some(desc) = ipmi_get_event_desc(intf, &rec) {
-        if standard.event_dir() {
-            print!("{} | Deasserted", desc);
-        } else {
-            print!("{} | Asserted", desc);
-        }
-    } else if standard.event_dir() {
-        print!("Unknown event | Deasserted");
+        print!("{} | ", desc);
+    }
+
+    // 事件状态
+    if standard.event_dir() {
+        print!("Deasserted");
     } else {
-        print!("Unknown event | Asserted");
+        print!("Asserted");
     }
 
     // 阈值信息（仅在extend模式且为特定传感器时）
@@ -604,21 +608,10 @@ pub fn ipmi_sel_savelist_entries(
                     if let Ok(common) =
                         crate::commands::sdr::SdrRecordCommonSensor::from_le_bytes(&record.raw)
                     {
-                        // 使用多种gen_id匹配策略，确保与ipmi_sdr_find_sdr_bynumtype保持一致
+                        // **修复**：只使用SDR记录自身的owner_id作为gen_id，确保缓存的精确性
                         let owner_id = common.keys.owner_id as u16;
-
-                        // 创建多个可能的gen_id匹配项
-                        let gen_ids = vec![
-                            owner_id,                 // 直接匹配
-                            owner_id | 0x0020,        // 与0x0020合并
-                            (owner_id << 8) | 0x0020, // 高位匹配
-                            0x0020,                   // 默认值
-                        ];
-
-                        for gen_id in gen_ids {
-                            let key = (gen_id, common.keys.sensor_num, common.sensor.sensor_type);
-                            cache.insert(key, record.clone());
-                        }
+                        let key = (owner_id, common.keys.sensor_num, common.sensor.sensor_type);
+                        cache.insert(key, record.clone());
                     }
                 }
             }

@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
+
 /// RMCP Protocol Implementation
 ///
 /// Remote Management Control Protocol - used for IPMI over LAN

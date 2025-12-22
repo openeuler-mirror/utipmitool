@@ -1,39 +1,24 @@
-# utipmitool
+## utipmitool - IPMI Management Tool
+A command-line tool implemented in Rust for controlling IPMI-enabled devices.
 
-#### Description
-utipmitool is a refactoring of ipmitool.
+#### Features
+- Supports basic IPMI protocol operations
+- User-friendly command-line interface
+- Supports RPM package building
+- Cross-platform support (Linux)
 
-#### Software Architecture
-Software architecture description
+#### Installation Guide
+1. Ensure the Rust toolchain is installed.
+2. Clone the repository.
+3. Navigate to the repository directory.
+4. Run `cargo build --release` to build the binary.
 
-#### Installation
+#### Contributing
+1.  Fork the repository.
+2.  Create a new Feat_xxx branch.
+3.  Commit your changes.
+4.  Submit a Pull Request.
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+#### Open Source License
+utipmitool is released under the [GPL-2.0-or-later](LICENSE) license.
 
-#### Instructions
-
-1.  xxxx
-2.  xxxx
-3.  xxxx
-
-#### Contribution
-
-1.  Fork the repository
-2.  Create Feat_xxx branch
-3.  Commit your code
-4.  Create Pull Request
-
-
-#### Gitee Feature
-
-1.  You can use Readme\_XXX.md to support different languages, such as Readme\_en.md, Readme\_zh.md
-2.  Gitee blog [blog.gitee.com](https://blog.gitee.com)
-3.  Explore open source project [https://gitee.com/explore](https://gitee.com/explore)
-4.  The most valuable open source project [GVP](https://gitee.com/gvp)
-5.  The manual of Gitee [https://gitee.com/help](https://gitee.com/help)
-6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
-
-## License
-utipmitool is licensed under [Apache-2.0](LICENSE)
