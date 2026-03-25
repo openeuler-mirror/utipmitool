@@ -608,7 +608,7 @@ pub static SENSOR_SPECIFIC_EVENT_TYPES: &[IpmiEventSensorType] = &[
     },
     IpmiEventSensorType {
         code: 0x08,
-        offset: 0x07,
+        offset: 0x06,
         data: 0xff,
         desc: "Power Supply Inactive",
     },
