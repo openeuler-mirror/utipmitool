@@ -107,6 +107,13 @@ pub struct GlobalArgs {
     #[arg(short = 'c', long)]
     pub csv_output: bool,
 
+    // 控制是否在 sensor list 中包含 Event-Only 传感器（默认关闭以匹配 ipmitool）
+    #[arg(
+        long,
+        help = "Include Event-Only sensors in 'sensor list' output (default: off)"
+    )]
+    pub include_event_only: bool,
+
     // 设备接口参数
     #[arg(short = 'I', long, default_value = "open")]
     pub interface: InterfaceType,
