@@ -68,7 +68,9 @@ pub fn ipmi_sdr_main(
         SdrCommand::Info => ipmi_sdr_info(intf),
         SdrCommand::List { record_type } => {
             // 使用builder模式设置标准格式
-            intf.context().output = OutputContext::default().with_extended(false);
+            intf.context().output = OutputContext::default()
+                .with_extended(false)
+                .with_from_sdr_list(true);
             let type_filter = match record_type {
                 None => 0xfe,                     // Default: all except OEM
                 Some(SdrRecordType::All) => 0xff, // All records including OEM
@@ -95,7 +97,9 @@ pub fn ipmi_sdr_main(
         }
         SdrCommand::Elist { record_type } => {
             // 使用builder模式设置扩展格式
-            intf.context().output = OutputContext::default().with_extended(true);
+            intf.context().output = OutputContext::default()
+                .with_extended(true)
+                .with_from_sdr_list(true);
             let type_filter = match record_type {
                 None => 0xfe,                     // Default: all except OEM
                 Some(SdrRecordType::All) => 0xff, // All records including OEM
@@ -179,10 +183,10 @@ pub fn ipmi_sdr_list(
 
     // 使用现有的传感器列表功能，这才是C版本真正做的事情
     // C版本的 "sdr list" 实际上调用 ipmi_sdr_print_sensor_fc() 来显示传感器读数
-    use crate::commands::sensor::sensor::ipmi_sensor_list;
+    use crate::commands::sensor::sensor::ipmi_sensor_list_from_sdr;
 
     // 调用传感器列表功能，从IpmiIntf内部获取OutputContext
-    ipmi_sensor_list(intf)?;
+    ipmi_sensor_list_from_sdr(intf)?;
 
     Ok(())
 }
@@ -537,7 +541,7 @@ pub const SDR_UNIT_PCT_YES: u8 = 1;
 #[repr(C)]
 pub struct SdrRecordMask {
     // discrete:DiscreteEvent,
-    threshold: ThresholdMask,
+    pub threshold: ThresholdMask,
 }
 //之前有联合体，根据具体的参数，输出不同的成员，是延迟使用类型
 //不能用枚举，因为枚举需要初始化的时候就要解析确定类型
@@ -642,9 +646,9 @@ bitflags! {
 #[derive(Debug, RAWDATA)]
 #[repr(C)]
 pub struct ThresholdMask {
-    assert: AssertFlags,     //16
-    deassert: DeassertFlags, //16
-    set_read: u16,           // 联合体部分16
+    pub assert: AssertFlags,     //16
+    pub deassert: DeassertFlags, //16
+    pub set_read: u16,           // 联合体部分16
 }
 
 impl ThresholdMask {
