@@ -8,6 +8,7 @@
 pub mod sensor;
 
 //use crate::commands::sdr::*;
+use crate::commands::sensor::sensor::ipmi_sensor_get;
 use crate::commands::sensor::sensor::ipmi_sensor_list;
 use crate::ipmi::intf::IpmiIntf;
 use clap::{Parser, Subcommand};
@@ -17,13 +18,12 @@ use std::error::Error;
 pub enum SensorCommand {
     /// List all sensors and thresholds
     List,
-    // /// Get detailed sensor information
-    // Get {
-    //     /// Sensor IDs (names)
-    //     #[arg(required = true, num_args = 1..)]
-    //     ids: Vec<String>
-    // },
-
+    /// Get detailed sensor information (like `ipmitool sensor get`)
+    Get {
+        /// Sensor IDs (names)
+        #[arg(required = true, num_args = 1..)]
+        ids: Vec<String>,
+    },
     // /// Manage sensor thresholds
     // Thresh(ThreshArgs),
 }
@@ -86,7 +86,7 @@ pub fn ipmi_sensor_main(
 ) -> Result<(), Box<dyn Error>> {
     match command {
         SensorCommand::List => ipmi_sensor_list(intf),
-        // SensorCommand::Get { ids } => ipmi_sensor_get(intf, &ids),
+        SensorCommand::Get { ids } => ipmi_sensor_get(intf, &ids),
         // SensorCommand::Thresh(args) => {
         //     match args.subcmd {
         //         ThreshSubcommand::Single { threshold, setting } => {
