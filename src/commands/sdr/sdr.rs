@@ -1244,49 +1244,19 @@ pub fn ipmi_sdr_read_sensor_value(
     if rsp.data_len >= 1 {
         let raw_reading = rsp.data[0];
 
-        // 检查是否为无效读数（常见的无效值）
-        let is_invalid_reading = match raw_reading {
-            0xff => true, // 常见的无效值标识
-            0x00 => {
-                // 对于某些传感器，0x00 可能表示无效或断开状态
-                // 需要结合状态位判断
-                //rsp.data_len >= 2 && (sr.s_reading_unavailable || sr.s_scanning_disabled)
-
-                //bgz 上一行注释，添加下面内容：
-                // 对于离散传感器，0x00是有效值
-                if sensor.is_threshold_sensor() {
-                    // 只有模拟传感器才检查状态位
-                    rsp.data_len >= 2 && (sr.s_reading_unavailable || sr.s_scanning_disabled)
-                } else {
-                    false // 离散传感器0x00为有效值
-                }
-            }
-            _ => false,
-        };
-
-        if is_invalid_reading {
-            debug5!(
-                "Sensor {:?} (#{:02x}) has invalid reading 0x{:02x}, marking as unavailable",
-                String::from_utf8_lossy(&sr.s_id).trim_matches('\0'),
-                sensor.keys.sensor_num,
-                raw_reading
-            );
-            sr.s_reading_valid = false;
-            sr.s_reading_unavailable = true;
-        } else {
-            sr.s_reading_valid = true;
-            sr.s_reading = raw_reading;
-            debug5!(
-                "Sensor {:?} (#{:02x}) reading set: {} (data[0]=0x{:02x}) valid={} unavailable={} disabled={}",
-                String::from_utf8_lossy(&sr.s_id).trim_matches('\0'),
-                sensor.keys.sensor_num,
-                sr.s_reading,
-                raw_reading,
-                sr.s_reading_valid,
-                sr.s_reading_unavailable,
-                sr.s_scanning_disabled
-            );
-        }    
+        sr.s_reading = raw_reading;
+        // 仅当 BMC 标记读取不可用时视为无效；否则视为有效（即使数值为 0 或 0xff）
+        sr.s_reading_valid = !sr.s_reading_unavailable;
+        debug5!(
+            "Sensor {:?} (#{:02x}) reading set: {} (data[0]=0x{:02x}) valid={} unavailable={} disabled={}",
+            String::from_utf8_lossy(&sr.s_id).trim_matches('\0'),
+            sensor.keys.sensor_num,
+            sr.s_reading,
+            raw_reading,
+            sr.s_reading_valid,
+            sr.s_reading_unavailable,
+            sr.s_scanning_disabled
+        );
     } else {
         debug5!(
             "Sensor {:?} (#{:02x}) no reading data available",
