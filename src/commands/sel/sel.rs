@@ -1244,19 +1244,40 @@ pub fn ipmi_get_next_event_sensor_type(
     // 假设所有事件类型都存储在一个静态数组中
     // 这里需要根据实际存储方式实现
     // 示例实现：
-    let all_events = [
-        &GENERIC_EVENT_TYPES,
-        &SENSOR_SPECIFIC_EVENT_TYPES,
-        &VITA_SENSOR_EVENT_TYPES,
-        &OEM_KONTRON_EVENT_TYPES,
+
+    // 仅在与起始事件相同的静态表中继续迭代，避免跨表混合导致误打印
+    let tables: [&[IpmiEventSensorType]; 4] = [
+        GENERIC_EVENT_TYPES,
+        SENSOR_SPECIFIC_EVENT_TYPES,
+        VITA_SENSOR_EVENT_TYPES,
+        OEM_KONTRON_EVENT_TYPES,
     ];
 
-    all_events
-        .iter()
-        .flat_map(|&table| table.iter())
-        .skip_while(|e| *e as *const _ != evt as *const _)
-        .skip(1)
-        .find(|e| e.code == evt.code)
+    for table in tables.iter() {
+        // 定位当前事件在该表中的位置
+        if let Some(pos) = table
+            .iter()
+            .position(|e| std::ptr::eq(&*e as *const _, evt as *const _))
+        {
+            let start_code = evt.code;
+            // 仅在同一表的后续元素中查找；遇到表结束或 code 变化即停止
+            for e in table.iter().skip(pos + 1) {
+                if e.desc.is_empty() {
+                    break;
+                }
+                if e.code == start_code {
+                    return Some(e);
+                } else {
+                    break;
+                }
+            }
+            // 同表未找到后继条目
+            return None;
+        }
+    }
+
+    // 未匹配任何表（不应发生）
+    None
 }
 // Assume SENSOR_TYPE_MAX and ipmi_generic_sensor_type_vals are defined elsewhere
 pub fn ipmi_get_generic_sensor_type(code: u8) -> Option<&'static str> {
