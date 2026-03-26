@@ -238,9 +238,9 @@ impl OpenIntf {
 
         // -v 模式输出
         if verbose_level == 1 {
-            println!("Running Get VSO Capabilities my_addr 0x20, transit 0, target 0");
-            println!("Invalid completion code received: Invalid command");
-            println!("Discovered IPMB address 0x0");
+            //println!("Running Get VSO Capabilities my_addr 0x20, transit 0, target 0");
+            //println!("Invalid completion code received: Invalid command");
+            //println!("Discovered IPMB address 0x0");
         }
         // -vv 及以上模式输出
         else if verbose_level == 2 {
@@ -387,10 +387,6 @@ impl IpmiIntf for OpenIntf {
         // 完成所有初始化后，获取 IANA 值
         // 此时文件描述符已有效，设备已初始化
         self.manufacturer_id = ipmi_get_oem(self);
-
-        // 显示调试信息，包括获取到的 IANA 值
-        let _verbose_level = crate::VERBOSE_LEVEL.load(std::sync::atomic::Ordering::Relaxed);
-        self.print_debug_info(); // 使用成员方法显示调试信息
 
         Ok(())
     }
