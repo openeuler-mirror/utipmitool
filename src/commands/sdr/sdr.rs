@@ -234,7 +234,7 @@ pub fn is_reading_unavailable(val: u8) -> bool {
 }
 
 pub fn is_scanning_disabled(val: u8) -> bool {
-    (val & SCANNING_DISABLED) != 0
+    (val & SCANNING_DISABLED) == 0
 }
 
 pub fn is_event_msg_disabled(val: u8) -> bool {
@@ -1058,7 +1058,7 @@ pub fn ipmi_sdr_read_sensor_value(
     match sdr_record_type {
         //full=59bytes,实际返回52,可能最后id_string的16个字节没有被填充
         SDR_RECORD_TYPE_FULL_SENSOR => match SdrRecordFullSensor::from_le_bytes(sensor_raw) {
-            Ok(s) => {
+            Ok(mut s) => {
                 // 需要可变以便可能调整 id_string
                 let mut idlen = (s.id_code & 0x1f) as usize;
                 if idlen == 0 {
@@ -1076,16 +1076,11 @@ pub fn ipmi_sdr_read_sensor_value(
                         }
                     }
                 }
-                let _effective_id_code = if (s.id_code & 0xC0) != 0xC0 {
-                    if idlen > 0 {
-                        idlen -= 1;
-                        s.id_code
-                    } else {
-                        s.id_code
-                    }
-                } else {
-                    s.id_code
-                };
+
+                // 不再对非ASCII类型的人为减一处理；
+                // 保持与 ipmitool 一致：按照 id_code 的长度位或实际可打印长度拷贝完整名称
+                let _effective_id_code = s.id_code;
+
                 idlen = idlen.min(sr.s_id.len() - 1).min(16);
                 if idlen > 0 {
                     sr.s_id[..idlen].copy_from_slice(&s.id_string[..idlen]);
@@ -1098,7 +1093,8 @@ pub fn ipmi_sdr_read_sensor_value(
             }
         },
         SDR_RECORD_TYPE_COMPACT_SENSOR => match SdrRecordCompactSensor::from_le_bytes(sensor_raw) {
-            Ok(s) => {
+            Ok(mut s) => {
+                // 依据 id_code 的低5位确定名称长度；为0则扫描确定
                 let mut idlen = (s.id_code & 0x1f) as usize;
                 if idlen == 0 {
                     for i in 0..16 {
@@ -1115,17 +1111,8 @@ pub fn ipmi_sdr_read_sensor_value(
                         }
                     }
                 }
-                let _effective_id_code = if (s.id_code & 0xC0) != 0xC0 {
-                    if idlen > 0 {
-                        idlen -= 1;
-                        s.id_code
-                    } else {
-                        s.id_code
-                    }
-                } else {
-                    s.id_code
-                };
-                idlen = idlen.min(sr.s_id.len() - 1).min(16);
+                // 不做额外 -1 截断，最多拷贝16字节
+                idlen = idlen.min(16);
                 if idlen > 0 {
                     sr.s_id[..idlen].copy_from_slice(&s.id_string[..idlen]);
                 }
@@ -1177,14 +1164,15 @@ pub fn ipmi_sdr_read_sensor_value(
             0xc1 | 0xc0 | 0xc3 => {
                 // 严重错误：Invalid command, Node busy, Invalid data field
                 debug5!(
-                    "Sensor {:?} (#{:02x}) has serious error 0x{:02x}, skipping",
+                    //"Sensor {:?} (#{:02x}) has serious error 0x{:02x}, skipping",
+                    "Sensor {:?} (#{:02x}) has serious error 0x{:02x}, treat ad no reading",
                     String::from_utf8_lossy(&sr.s_id).trim_matches('\0'),
                     sensor.keys.sensor_num,
                     rsp.ccode
                 );
                 sr.s_reading_valid = false;
                 sr.s_reading_unavailable = true;
-                sr.s_scanning_disabled = true;
+                //sr.s_scanning_disabled = true;
                 return Some(sr);
             }
             _ => {
@@ -1232,6 +1220,14 @@ pub fn ipmi_sdr_read_sensor_value(
             rsp.data[1]
         );
     }
+
+    debug5!(
+        "Status bits decode: data1=0x{:02x}, unavailable={}, scanning_disabled={}, event_msg_disabled={}",
+        rsp.data[1],
+        is_reading_unavailable(rsp.data[1]),
+        is_scanning_disabled(rsp.data[1]),
+        is_event_msg_disabled(rsp.data[1])
+    );
 
     if is_scanning_disabled(rsp.data[1]) {
         sr.s_scanning_disabled = true;
@@ -1290,7 +1286,7 @@ pub fn ipmi_sdr_read_sensor_value(
                 sr.s_reading_unavailable,
                 sr.s_scanning_disabled
             );
-        }
+        }    
     } else {
         debug5!(
             "Sensor {:?} (#{:02x}) no reading data available",
@@ -1424,6 +1420,86 @@ pub fn ipmi_sdr_get_sensor_thresholds(
     let rsp = intf.sendrecv(&req)?;
 
     // Restore original addressing if bridged
+    if bridged_request {
+        intf.context().set_target_addr(save_addr);
+        intf.context().set_target_channel(save_channel);
+    }
+
+    Some(rsp)
+}
+
+/// Retrieve sensor event enables (GET_SENSOR_EVENT_ENABLE, 0x29)
+pub fn ipmi_sdr_get_sensor_event_enable(
+    intf: &mut dyn IpmiIntf,
+    sensor: u8,
+    target: u8,
+    lun: u8,
+    channel: u8,
+) -> Option<IpmiRs> {
+    let mut bridged_request = false;
+    let mut save_addr = 0;
+    let mut save_channel = 0;
+
+    // Handle bridged requests (align with threshold/query patterns)
+    if intf.context().bridge_to_sensor(target, channel) {
+        bridged_request = true;
+        save_addr = intf.context().target_addr();
+        save_channel = intf.context().target_channel();
+        intf.context().set_target_addr(target as u32);
+        intf.context().set_target_channel(channel);
+    }
+
+    let mut data = [sensor];
+
+    let mut req = IpmiRq::default();
+    req.msg.netfn_mut(IPMI_NETFN_SE);
+    req.msg.lun_mut(lun);
+    req.msg.cmd = GET_SENSOR_EVENT_ENABLE;
+    req.msg.data = data.as_mut_ptr();
+    req.msg.data_len = data.len() as u16;
+
+    let rsp = intf.sendrecv(&req)?;
+
+    if bridged_request {
+        intf.context().set_target_addr(save_addr);
+        intf.context().set_target_channel(save_channel);
+    }
+
+    Some(rsp)
+}
+
+/// Retrieve sensor event status (GET_SENSOR_EVENT_STATUS, 0x2B)
+pub fn ipmi_sdr_get_sensor_event_status(
+    intf: &mut dyn IpmiIntf,
+    sensor: u8,
+    target: u8,
+    lun: u8,
+    channel: u8,
+) -> Option<IpmiRs> {
+    let mut bridged_request = false;
+    let mut save_addr = 0;
+    let mut save_channel = 0;
+
+    // Handle bridged requests similar to thresholds/enable getters
+    if intf.context().bridge_to_sensor(target, channel) {
+        bridged_request = true;
+        save_addr = intf.context().target_addr();
+        save_channel = intf.context().target_channel();
+        intf.context().set_target_addr(target as u32);
+        intf.context().set_target_channel(channel);
+    }
+
+    let mut data = [sensor];
+
+    let mut req = IpmiRq::default();
+    req.msg.netfn_mut(IPMI_NETFN_SE);
+    req.msg.lun_mut(lun);
+    req.msg.cmd = GET_SENSOR_EVENT_STATUS;
+    req.msg.data = data.as_mut_ptr();
+    req.msg.data_len = data.len() as u16;
+
+    let rsp = intf.sendrecv(&req)?;
+
     if bridged_request {
         intf.context().set_target_addr(save_addr);
         intf.context().set_target_channel(save_channel);
