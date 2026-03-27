@@ -502,7 +502,8 @@ const IPMI_AUTHTYPE_VALS: &[U8Str] = &[
     },
     U8Str { val: 0, desc: "" },
 ];
-const ENTITY_ID_VALS: &[ValStr] = &[
+// NOTE: Keep in sync with ipmitool's entity_id_vals for name alignment
+pub const ENTITY_ID_VALS: &[ValStr] = &[
     ValStr {
         val: 0x00,
         desc: "Unspecified",
@@ -805,6 +806,18 @@ const ENTITY_ID_VALS: &[ValStr] = &[
         desc: "",
     },
 ];
+
+/// Lookup helper to translate an Entity ID code to its human-readable name.
+/// Falls back to "Unknown" when not found.
+pub fn entity_id_to_str(id: u8) -> &'static str {
+    for v in ENTITY_ID_VALS {
+        if v.val == id as u32 {
+            // Empty string in table is used as terminator; treat as Unknown
+            return if v.desc.is_empty() { "Unknown" } else { v.desc };
+        }
+    }
+    "Unknown"
+}
 
 const ENTITY_DEVICE_TYPE_VALS: &[ValStr] = &[
     ValStr {
