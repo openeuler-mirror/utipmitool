@@ -242,159 +242,173 @@ pub fn ipmi_sensor_list(mut intf: Box<dyn IpmiIntf>) -> Result<(), Box<dyn Error
     Ok(())
 }
 
-/*
-//关键入口
-pub fn ipmi_sensor_print_fc_threshold(
-    intf: &mut dyn IpmiIntf,
-    sensor_raw: &[u8],
-    sdr_record_type: u8,
-) -> bool {
-    let _ctx = intf.context().output_config().clone();
-    let mut thresh_available = true;
 
-    // Read sensor value
-    let sr: SensorReading = match ipmi_sdr_read_sensor_value(intf, sensor_raw, sdr_record_type, 3) {
-        Some(val) => {
-            // Check if sensor name is valid
-            let binding = String::from_utf8_lossy(&val.s_id);
-            let sensor_name = binding.trim_matches('\0').trim();
-            if sensor_name.is_empty() {
-                debug5!("Threshold sensor has empty name but continuing with basic display");
-                // Don't return false, continue to display this sensor with fallback info
-            }
-            val
+
+/// 从 sdr list 入口调用的传感器列表包装函数，确保 from_sdr_list 标志为 true
+pub fn ipmi_sensor_list_from_sdr(mut intf: Box<dyn IpmiIntf>) -> Result<(), Box<dyn Error>> {
+    // 强制标记来源为 sdr list（避免中途被覆盖导致的对齐问题）
+    {
+        let ctx = intf.context();
+        if !ctx.output.from_sdr_list {
+            ctx.output.set_from_sdr_list(true);
         }
-        None => {
-            // If sensor parsing fails, try to show basic info from SDR record
-            debug5!("Failed to read sensor value, attempting to show basic info from SDR");
+        }
+        
+    ipmi_sensor_list(intf)
+}
 
-            // Try to parse sensor info for display based on record type
-            let sensor_name = match sdr_record_type {
-                SDR_RECORD_TYPE_FULL_SENSOR => {
-                    if let Ok(full_sensor) = SdrRecordFullSensor::from_le_bytes(sensor_raw) {
-                        let id_len = (full_sensor.id_code & 0x1f) as usize;
-                        if id_len > 0 && id_len <= 16 {
-                            String::from_utf8_lossy(&full_sensor.id_string[..id_len])
-                                .trim_matches('\0')
-                                .trim()
-                                .to_string()
-                        } else {
-                            "Unknown".to_string()
-                        }
-                    } else {
-                        "Unknown".to_string()
-                    }
-                }
-                SDR_RECORD_TYPE_COMPACT_SENSOR => {
-                    if let Ok(compact_sensor) = SdrRecordCompactSensor::from_le_bytes(sensor_raw) {
-                        let id_len = (compact_sensor.id_code & 0x1f) as usize;
-                        if id_len > 0 && id_len <= 16 {
-                            String::from_utf8_lossy(&compact_sensor.id_string[..id_len])
-                                .trim_matches('\0')
-                                .trim()
-                                .to_string()
-                        } else {
-                            "Unknown".to_string()
-                        }
-                    } else {
-                        "Unknown".to_string()
-                    }
-                }
-                _ => "Unknown".to_string(),
+/// Get detailed sensor information by names (aligns with `ipmitool sensor get`)
+pub fn ipmi_sensor_get(
+    mut intf: Box<dyn IpmiIntf>,
+    ids: &Vec<String>,
+) -> Result<(), Box<dyn Error>> {
+    // Force verbose mode for detailed output
+    let mut ctx = intf.context().output_config().clone();
+    if ctx.verbose == 0 {
+        ctx.verbose = 1;
+    }
+    intf.context().output = ctx.clone();
+
+    // Build a lowercase set of requested names for case-insensitive matching
+    let mut wanted: Vec<String> = ids.iter().map(|s| s.to_ascii_lowercase()).collect();
+
+    // Iterate SDR and print matching sensors in verbose mode
+    if let Some(mut iter) = SdrIterator::new(intf.as_mut(), false) {
+        while let Some(header) = iter.next() {
+            let rec = match iter.ipmi_sdr_get_record(&header) {
+                Some(r) => r,
+                None => continue,
             };
 
-            // 放宽过滤条件：对于"Unknown"名称，尝试增强的名称提取
-            let final_sensor_name = if sensor_name == "Unknown" || sensor_name.is_empty() {
-                debug5!("Threshold sensor has Unknown/empty name, trying enhanced extraction");
+            // Try to extract name for matching depending on record type
+            let name = match header.record_type {    
+            SDR_RECORD_TYPE_FULL_SENSOR => {                    
+                    if let Ok(full) = SdrRecordFullSensor::from_le_bytes(&rec) {
+                        let id_len = (full.id_code & 0x1f) as usize;
+                        String::from_utf8_lossy(&full.id_string[..id_len.min(16)])
+                            .trim_matches('\0')
+                            .trim()
+                            .to_string()             
+                   } else {
+                        extract_sensor_name_from_full_compact_data(
+                            &rec,
+                            SDR_RECORD_TYPE_FULL_SENSOR,
+                        )                    
+                    
+                   
+                   }
+               }
+               SDR_RECORD_TYPE_COMPACT_SENSOR => {                
+                    if let Ok(compact) = SdrRecordCompactSensor::from_le_bytes(&rec) {
+                        let id_len = (compact.id_code & 0x1f) as usize;
+                        String::from_utf8_lossy(&compact.id_string[..id_len.min(16)])
+                            .trim_matches('\0')
+                            .trim()
+                            .to_string()                
+                   } else {                    
+                       extract_sensor_name_from_full_compact_data(
+                            &rec,
+                            SDR_RECORD_TYPE_COMPACT_SENSOR,
+                        )                                        
+                   }
+               }
+               0x03 => extract_sensor_name_from_raw_data(&rec, 0),
+               _ => String::new(),
 
-                // 尝试从原始数据中提取名称
-                let extracted_name =
-                    extract_sensor_name_from_full_compact_data(sensor_raw, sdr_record_type);
+           };
 
-                if !extracted_name.is_empty() && extracted_name != "Unknown" {
-                    extracted_name
-                } else {
-                    format!(
-                        "Sensor_{:02X}",
-                        if let Ok(common_sensor) = SdrRecordCommonSensor::from_le_bytes(sensor_raw)
-                        {
-                            common_sensor.keys.sensor_num
-                        } else {
-                            0
-                        }
-                    )
-                }
-            } else {
-                sensor_name
-            };
+           // 放宽过滤条件：对于"Unknown"名称，尝试增强的名称提取
+           let final_sensor_name = if sensor_name == "Unknown" || sensor_name.is_empty() {
+               debug5!("Threshold sensor has Unknown/empty name, trying enhanced extraction");
 
-            // Show sensor with 'no reading' like C version (简单格式)
-            println!(
-                "{:<16} | {:<17} | {:<6}",
-                final_sensor_name, "no reading", "na"
-            );
-            return true;
-        }
-    };
+               // 尝试从原始数据中提取名称
+               let extracted_name =
+                   extract_sensor_name_from_full_compact_data(sensor_raw, sdr_record_type);
 
-    // Get threshold status
-    //let thresh_status = sr.ipmi_sdr_get_thresh_status( "ns");
+               if !extracted_name.is_empty() && extracted_name != "Unknown" {
+                   extracted_name
+               } else {
+                   format!(
+                       "Sensor_{:02X}",
+                       if let Ok(common_sensor) = SdrRecordCommonSensor::from_le_bytes(sensor_raw)
+                       {
+                           common_sensor.keys.sensor_num
+                       } else {
+                           0
+                       }
+                   )
+               }
+           } else {
+               sensor_name
+           };
 
-    // Get sensor thresholds
-    //多次解析sensor对象
-    let sensor = match SdrRecordCommonSensor::from_le_bytes(sensor_raw) {
-        Ok(s) => s,
-        Err(e) => {
-            debug5!("Error: Failed to parse sensor record:{}", e);
-            return false;
-        }
-    };
+           // Show sensor with 'no reading' like C version (简单格式)
+           println!(
+               "{:<16} | {:<17} | {:<6}",
+               final_sensor_name, "no reading", "na"
+           );
+           return true;
+       }
+   };
 
-    // Get sensor thresholds and check response
-    //3f, 0a, 05, 05, 5d, 62, 62
-    let rsp = match ipmi_sdr_get_sensor_thresholds(
-        intf,
-        sensor.keys.sensor_num,
-        sensor.keys.owner_id,
-        sensor.keys.lun(),
-        sensor.keys.channel(),
-    ) {
-        Some(r) if r.ccode == 0 && r.data_len > 0 => Some(r),
-        _ => {
-            thresh_available = false;
-            None
-        }
-    };
-    //print!("SensorReading: {:#?} ", sr);
-    if let Some(ref response) = rsp {
-        // 根据参数和OutputContext决定输出格式
-        if _ctx.verbose >= 1 {
-            // -v和-vv都显示完整详细格式（调试信息差异主要在SDR读取过程）
-            ipmi_sensor_print_fc_threshold_verbose(
-                intf,
-                &sr,
-                thresh_available,
-                response,
-                sensor_raw,
-                sdr_record_type,
-            );
-        } else if _ctx.csv {
-            // CSV格式输出
-            let stdout = sr.dump_sensor_fc_threshold_csv(thresh_available, response, &_ctx);
-            println!("{}", stdout);
-        } else if _ctx.extended {
-            // 扩展格式：显示传感器号、实体ID等额外信息（匹配C版本sdr_extended=1）
-            let stdout = sr.dump_sensor_fc_threshold_extended(
-                thresh_available,
-                response,
-                &_ctx,
-                sensor_raw,
-                sdr_record_type,
-            );
-            println!("{}", stdout);
-        } else {
-            // 默认格式：显示完整阈值信息（匹配C版本的默认行为）
-            let stdout = sr.dump_sensor_fc_thredshold(thresh_available, response, &_ctx);
+   // Get threshold status
+   //let thresh_status = sr.ipmi_sdr_get_thresh_status( "ns");
+
+   // Get sensor thresholds
+   //多次解析sensor对象
+   let sensor = match SdrRecordCommonSensor::from_le_bytes(sensor_raw) {
+       Ok(s) => s,
+       Err(e) => {
+           debug5!("Error: Failed to parse sensor record:{}", e);
+           return false;
+       }
+   };
+
+   // Get sensor thresholds and check response
+   //3f, 0a, 05, 05, 5d, 62, 62
+   let rsp = match ipmi_sdr_get_sensor_thresholds(
+       intf,
+       sensor.keys.sensor_num,
+       sensor.keys.owner_id,
+       sensor.keys.lun(),
+       sensor.keys.channel(),
+   ) {
+       Some(r) if r.ccode == 0 && r.data_len > 0 => Some(r),
+       _ => {
+           thresh_available = false;
+           None
+       }
+   };
+   //print!("SensorReading: {:#?} ", sr);
+   if let Some(ref response) = rsp {
+       // 根据参数和OutputContext决定输出格式
+       if _ctx.verbose >= 1 {
+           // -v和-vv都显示完整详细格式（调试信息差异主要在SDR读取过程）
+           ipmi_sensor_print_fc_threshold_verbose(
+               intf,
+               &sr,
+               thresh_available,
+               response,
+               sensor_raw,
+               sdr_record_type,
+           );
+       } else if _ctx.csv {
+           // CSV格式输出
+           let stdout = sr.dump_sensor_fc_threshold_csv(thresh_available, response, &_ctx);
+           println!("{}", stdout);
+       } else if _ctx.extended {
+           // 扩展格式：显示传感器号、实体ID等额外信息（匹配C版本sdr_extended=1）
+           let stdout = sr.dump_sensor_fc_threshold_extended(
+               thresh_available,
+               response,
+               &_ctx,
+               sensor_raw,
+               sdr_record_type,
+           );
+           println!("{}", stdout);
+       } else {
+           // 默认格式：显示完整阈值信息（匹配C版本的默认行为）
+           let stdout = sr.dump_sensor_fc_thredshold(thresh_available, response, &_ctx);
             println!("{}", stdout);
         }
     } else {
