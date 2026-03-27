@@ -157,7 +157,8 @@ fn main() {
         },
         bridging: None,
         protocol: ProtocolContext::default(),
-        output: OutputContext::new(cli.global.csv_output, cli.global.verbose),
+        output: OutputContext::new(cli.global.csv_output, cli.global.verbose)
+            .with_event_only(cli.global.include_event_only),
     };
 
     // 加载接口
@@ -236,12 +237,8 @@ fn main() {
             ctx.transit_addr(),
             ctx.transit_channel()
         );
-        if ctx.target_ipmb_addr() != 0 {
-            log::info!(
-                "Discovered Target IPMB-0 address 0x{:02x}",
-                ctx.target_ipmb_addr()
-            );
-        }
+        // Align with ipmitool: print a single discovery line at -v before first sensor output
+        // Moved to sensor list path to avoid printing during `sdr list`.
 
         // -vv级别的调试信息：接口地址信息
         debug2!(
@@ -313,6 +310,8 @@ fn main() {
         }
         MainCommand::Sensor { subcmd } => {
             let command = subcmd.unwrap_or(SensorCommand::List);
+            // 标记为来自 sensor list 路径，避免 sdr list 的额外行
+            intf.with_context(|ctx| ctx.output.set_from_sdr_list(false));
             ipmi_sensor_main(command, intf).unwrap_or_else(|e| log::error!("Error: {}", e))
         }
 
@@ -321,6 +320,7 @@ fn main() {
         }
 
         MainCommand::Sdr { subcmd } => {
+            // sdr 路径由 sdr 模块自行设置 from_sdr_list
             ipmi_sdr_main(subcmd, intf).unwrap_or_else(|e| log::error!("Error: {}", e))
         }
         MainCommand::User { subcmd } => {
