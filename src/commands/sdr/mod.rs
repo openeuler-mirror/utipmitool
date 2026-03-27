@@ -70,7 +70,10 @@ pub fn ipmi_sdr_main(
             // 使用builder模式设置标准格式
             intf.context().output = OutputContext::default()
                 .with_extended(false)
-                .with_from_sdr_list(true);
+                            .with_from_sdr_list(true)
+                // sdr list 使用简洁模式，只输出 name/value/status 三列
+                .with_simple_sdr_list(true);
+            
             let type_filter = match record_type {
                 None => 0xfe,                     // Default: all except OEM
                 Some(SdrRecordType::All) => 0xff, // All records including OEM
@@ -99,7 +102,10 @@ pub fn ipmi_sdr_main(
             // 使用builder模式设置扩展格式
             intf.context().output = OutputContext::default()
                 .with_extended(true)
-                .with_from_sdr_list(true);
+                            .with_from_sdr_list(true)
+                // elist 仍然保留详细模式，不启用 simple_sdr_list
+                .with_simple_sdr_list(false);
+            
             let type_filter = match record_type {
                 None => 0xfe,                     // Default: all except OEM
                 Some(SdrRecordType::All) => 0xff, // All records including OEM
