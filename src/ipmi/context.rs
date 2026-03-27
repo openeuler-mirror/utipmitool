@@ -19,6 +19,10 @@ pub struct OutputContext {
     pub verbose: u8,
     /// 是否使用扩展格式输出 (显示传感器号、实体ID等额外信息)
     pub extended: bool,
+    /// 是否包含 Event-Only 传感器（默认false以匹配 ipmitool）
+    pub include_event_only: bool,
+    /// 调用来源：若为 sdr list 调用，将在 verbose 输出中包含更多 SDR 相关行
+    pub from_sdr_list: bool,
 }
 
 impl OutputContext {
@@ -28,6 +32,8 @@ impl OutputContext {
             csv,
             verbose,
             extended: false,
+            include_event_only: false,
+            from_sdr_list: false,
         }
     }
 
@@ -37,6 +43,8 @@ impl OutputContext {
             csv,
             verbose,
             extended,
+            include_event_only: false,
+            from_sdr_list: false,
         }
     }
 
@@ -63,6 +71,18 @@ impl OutputContext {
         self
     }
 
+    /// 设置是否包含 Event-Only 传感器（链式调用）
+    pub fn with_event_only(mut self, include: bool) -> Self {
+        self.include_event_only = include;
+        self
+    }
+
+    /// 标记调用来源为 sdr list
+    pub fn with_from_sdr_list(mut self, from_sdr: bool) -> Self {
+        self.from_sdr_list = from_sdr;
+        self
+    }
+
     /// 是否启用详细输出
     pub fn is_verbose(&self) -> bool {
         self.verbose > 0
@@ -83,6 +103,16 @@ impl OutputContext {
         self.extended
     }
 
+    /// 是否包含 Event-Only 传感器
+    pub fn is_event_only_included(&self) -> bool {
+        self.include_event_only
+    }
+
+    /// 是否从 sdr list 调用
+    pub fn is_from_sdr_list(&self) -> bool {
+        self.from_sdr_list
+    }
+
     /// 设置扩展格式输出（可变引用方式）
     pub fn set_extended(&mut self, extended: bool) {
         self.extended = extended;
@@ -96,6 +126,16 @@ impl OutputContext {
     /// 设置详细程度（可变引用方式）
     pub fn set_verbose(&mut self, verbose: u8) {
         self.verbose = verbose;
+    }
+
+    /// 设置是否包含 Event-Only 传感器
+    pub fn set_event_only(&mut self, include: bool) {
+        self.include_event_only = include;
+    }
+
+    /// 设置调用来源为 sdr list
+    pub fn set_from_sdr_list(&mut self, from_sdr: bool) {
+        self.from_sdr_list = from_sdr;
     }
 }
 
