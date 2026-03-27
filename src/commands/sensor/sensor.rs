@@ -8,6 +8,9 @@ use crate::commands::sdr::iter::SdrIterator;
 use crate::commands::sdr::sdr::*;
 use crate::commands::sdr::types::{SDR_RECORD_TYPE_COMPACT_SENSOR, SDR_RECORD_TYPE_FULL_SENSOR};
 use crate::commands::sdr::{SdrRecordCommonSensor, SdrRecordEventonlySensor};
+use crate::commands::sel::sel::{
+    ipmi_get_first_event_sensor_type, ipmi_get_next_event_sensor_type,
+};
 use crate::error::IpmiError;
 use crate::ipmi::context::OutputContext;
 use crate::ipmi::intf::IpmiIntf;
@@ -17,6 +20,13 @@ use unpack::RAWDATA;
 
 use ipmi_macros::AsBytes;
 use std::error::Error;
+
+//bgz
+use crate::commands::sdr::AssertFlags;
+use crate::commands::sdr::DeassertFlags;
+use crate::commands::sdr::InitFlags;
+use crate::commands::sdr::ReadFlags;
+use crate::commands::sdr::SetFlags;
 
 // Threshold specification bits
 pub const UPPER_NON_RECOV_SPECIFIED: u8 = 0x20;
