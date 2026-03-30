@@ -1587,6 +1587,82 @@ pub fn ipmi_sensor_print_fc_threshold_verbose(
     println!(); // 空行分隔
 }
 
+/// 根据事件使能掩码打印离散断言/去断言状态（与 ipmitool 对齐）
+fn print_discrete_state_from_masks(
+    intf: &mut dyn IpmiIntf,
+    header: &str,
+    sensor_type: u8,
+    event_type: u8,
+    state1: u8,
+    state2: u8,
+) {
+    // 若两字节均无有效位（第二字节仅低7位有效），直接不打印
+    if state1 == 0 && (state2 & 0x7f) == 0 {
+        return;
+    }
+
+    // 先打印头部："Assertions Enabled : <Sensor Type>"
+    let sensor_type_desc = get_sensor_type_description(sensor_type);
+    println!(" {:<21} : {}", header, sensor_type_desc);
+
+    // 遍历事件类型映射，按置位的 offset 打印具体描述
+
+    // 过滤器：针对 System Event(0x12) 不打印 "Disabled" 项，以匹配原生输出
+    let should_print = |desc: &str, st: u8| {
+        if st == 0x12 && desc.eq_ignore_ascii_case("Disabled") {
+            return false;
+        }
+        //bgz
+        if st == 0x17 && desc.eq_ignore_ascii_case("Failure detected") {
+            return false;
+        }
+
+        true
+    };
+
+    let target_code = if event_type == 0x6f {
+        sensor_type
+    } else {
+        event_type
+    };
+
+    let mut evt_opt = ipmi_get_first_event_sensor_type(intf, sensor_type, event_type);
+    while let Some(evt) = evt_opt {
+        //bgz
+        // 只处理与目标代码匹配的事件，避免跨表混合造成误打印（例如 Add-in Card 混入 Power Unit 的 "Failure detected"）
+        if evt.code != target_code {
+            evt_opt = ipmi_get_next_event_sensor_type(evt);
+            continue;
+        }
+
+        // 只有 data == 0xFF 的条目参与断言映射（与 ipmitool 一致）
+        if evt.data == 0xFF && !evt.desc.is_empty() {
+            if evt.offset > 7 {
+                // 高位偏移通过 state2 的低7位表示
+                let bit = 1u8 << (evt.offset - 8);
+                if (state2 & 0x7f) & bit != 0 {
+                    //println!("                         [{}]", evt.desc);
+                    if should_print(evt.desc, sensor_type) {
+                        println!("                         [{}]", evt.desc);
+                    }
+                }
+            } else {
+                let bit = 1u8 << evt.offset;
+                if state1 & bit != 0 {
+                    //println!("                         [{}]", evt.desc);
+                    if should_print(evt.desc, sensor_type) {
+                        println!("                         [{}]", evt.desc);
+                    }
+                }
+            }
+        }
+        evt_opt = ipmi_get_next_event_sensor_type(evt);
+    }
+}
+
+
+
+
 /// Verbose模式下的离散传感器输出（匹配ipmitool风格）
 pub fn ipmi_sensor_print_fc_discrete_verbose(
     intf: &mut dyn IpmiIntf,
