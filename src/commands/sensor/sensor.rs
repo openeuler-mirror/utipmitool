@@ -2546,7 +2546,7 @@ impl SensorReading {
 
         // 读数部分（完全匹配C版本格式）
         if self.s_reading_valid {
-            /*
+            
             if self.s_has_analog_value {
                 // 模拟值传感器：显示数值和单位（匹配C版本格式）
                 // C版本格式：| 49 degrees C      | ok
@@ -2561,22 +2561,8 @@ impl SensorReading {
                 // 离散传感器：显示十六进制值
                 output.push_str(&format!("| 0x{:<15x} | {:<6}", self.s_data2, thresh_status));
             }
-            */
-            //bgz里面内容全部替换为下面：
-            if self.s_has_analog_value {
-                // 对于温度传感器，当值为0时显示为"disabled"
-                if self.s_a_val == 0.0 && self.s_a_units.contains("degrees") {
-                    output.push_str(&format!("| {:<17} | {:<6}", "disabled", "ns"));
-                } else {
-                    // 正常显示模拟值
-                    let value_str = if self.s_a_val.fract() == 0.0 {
-                        format!("{} {}", self.s_a_val as i32, self.s_a_units)
-                    } else {
-                        format!("{:.2} {}", self.s_a_val, self.s_a_units)
-                    };
-                    output.push_str(&format!("| {:<17} | {:<6}", value_str, thresh_status));
-                }
-            }
+            
+
         } else {
             // 无效读数（匹配C版本的"no reading"格式）
             output.push_str(&format!("| {:<17} | {:<6}", "no reading", "na"));
