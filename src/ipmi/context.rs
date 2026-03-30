@@ -23,6 +23,8 @@ pub struct OutputContext {
     pub include_event_only: bool,
     /// 调用来源：若为 sdr list 调用，将在 verbose 输出中包含更多 SDR 相关行
     pub from_sdr_list: bool,
+    /// 是否使用 sdr list 简洁模式（只输出 name/value/status 三列）
+    pub simple_sdr_list: bool,
 }
 
 impl OutputContext {
