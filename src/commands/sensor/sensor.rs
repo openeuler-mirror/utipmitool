@@ -323,50 +323,50 @@ pub fn ipmi_sensor_get(
 
                // 尝试从原始数据中提取名称
                let extracted_name =
-                  extract_sensor_name_from_full_compact_data(sensor_raw, sdr_record_type);
+                   extract_sensor_name_from_full_compact_data(sensor_raw, sdr_record_type);
 
-            let name_lc = name.to_ascii_lowercase();
-            let matched =
-                !name_lc.is_empty() && wanted.iter().any(|w| w == &name_lc || name_lc.contains(w));
++            let name_lc = name.to_ascii_lowercase();
++            let matched =
++                !name_lc.is_empty() && wanted.iter().any(|w| w == &name_lc || name_lc.contains(w));
 
-            if matched {
-                // Dispatch to the same print functions; they will check ctx.verbose and print details
-                match header.record_type {
-                    SDR_RECORD_TYPE_FULL_SENSOR | SDR_RECORD_TYPE_COMPACT_SENSOR => {
-                        ipmi_sensor_print_fc_threshold(iter.intf, &rec, header.record_type);
-                    }
-                    0x03 => {
-                        ipmi_sensor_print_eventonly(iter.intf, &rec);
-                    }
-                    _ => {}
-                }
- 
-                // Remove the matched name if it was an exact match to avoid duplicate prints
-                if let Some(pos) = wanted.iter().position(|w| w == &name_lc) {
-                    wanted.remove(pos);
-                }
-                if wanted.is_empty() {
-                    break;
-                }
-            }
++            if matched {
++                // Dispatch to the same print functions; they will check ctx.verbose and print details
++                match header.record_type {
++                    SDR_RECORD_TYPE_FULL_SENSOR | SDR_RECORD_TYPE_COMPACT_SENSOR => {
++                        ipmi_sensor_print_fc_threshold(iter.intf, &rec, header.record_type);
++                    }
++                    0x03 => {
++                        ipmi_sensor_print_eventonly(iter.intf, &rec);
++                    }
++                    _ => {}
+                 }
+  
++                // Remove the matched name if it was an exact match to avoid duplicate prints
++                if let Some(pos) = wanted.iter().position(|w| w == &name_lc) {
++                    wanted.remove(pos);
++                }
++                if wanted.is_empty() {
++                    break;
++                }
++            }
+         }
+
++    }
+
+
+
++    if !wanted.is_empty() {
++        for w in wanted {
++            println!("Sensor '{}' not found", w);
+
+
+
+
         }
-
     }
 
 
-
-    if !wanted.is_empty() {
-        for w in wanted {
-            println!("Sensor '{}' not found", w);
-
-
-
-
-       }
-   }
-
-
-    Ok(())
++    Ok(())
 }
 
 
@@ -589,246 +589,14 @@ pub fn ipmi_sensor_print_fc_discrete(
         Some(val) => {
             // Check if sensor name is valid
             let binding = String::from_utf8_lossy(&val.s_id);
-           let sensor_name = binding.trim_matches('\0').trim();
-    // 仅截断到第一个 NUL(0x00)，保留尾部空格以复现 ipmitool 的间距
-    let zero_pos = sr
-        .s_id
-        .iter()
-        .position(|&b| b == 0)
-        .unwrap_or(sr.s_id.len());
-    let sensor_name = String::from_utf8_lossy(&sr.s_id[..zero_pos]).to_string();
-           if sensor_name.is_empty() {
-               debug5!("Discrete sensor has empty name but continuing with basic display");
-               // Don't return false, continue to display this sensor with fallback info
-           }
-           val
-       }
-        None => {
-            // For discrete sensors, create a basic SensorReading even if data reading fails
-            debug5!("Failed to read discrete sensor value, creating basic discrete sensor info");
-
-            let mut sr = SensorReading::new();
-
-            // Try to parse sensor info for display based on record type
-            let sensor_name = match sdr_record_type {
-                SDR_RECORD_TYPE_FULL_SENSOR => {
-                    if let Ok(full_sensor) = SdrRecordFullSensor::from_le_bytes(sensor_raw) {
-                        let mut id_len = (full_sensor.id_code & 0x1f) as usize;
-
-                        // Enhanced name extraction logic
-                        if id_len == 0 {
-                            for i in 0..16 {
-                                if full_sensor.id_string[i] == 0
-                                    || full_sensor.id_string[i] < 0x20
-                                    || full_sensor.id_string[i] > 0x7e
-                                {
-                                    id_len = i;
-                                    break;
-                                }
-                                if i == 15 {
-                                    if full_sensor
-                                        .id_string
-                                        .iter()
-                                        .all(|&b| (0x20..=0x7e).contains(&b))
-                                    {
-                                        id_len = 16;
-                                    } else {
-                                        id_len = 0;
-                                    }
-                                }
-                            }
-                        }
-
-                        if id_len > 0 && id_len <= 16 {
-                            String::from_utf8_lossy(&full_sensor.id_string[..id_len])
-                                .trim_matches('\0')
-                                .trim()
-                                .to_string()
-                        } else {
-                            "Unknown".to_string()
-                        }
-                    } else {
-                        "Unknown".to_string()
-                    }
-                }
-                SDR_RECORD_TYPE_COMPACT_SENSOR => {
-                    if let Ok(compact_sensor) = SdrRecordCompactSensor::from_le_bytes(sensor_raw) {
-                        let mut id_len = (compact_sensor.id_code & 0x1f) as usize;
-
-                        // Enhanced name extraction logic
-                        if id_len == 0 {
-                            for i in 0..16 {
-                                if compact_sensor.id_string[i] == 0
-                                    || compact_sensor.id_string[i] < 0x20
-                                    || compact_sensor.id_string[i] > 0x7e
-                                {
-                                    id_len = i;
-                                    break;
-                                }
-                                if i == 15 {
-                                    if compact_sensor
-                                        .id_string
-                                        .iter()
-                                        .all(|&b| (0x20..=0x7e).contains(&b))
-                                    {
-                                        id_len = 16;
-                                    } else {
-                                        id_len = 0;
-                                    }
-                                }
-                            }
-                        }
-
-                        if id_len > 0 && id_len <= 16 {
-                            String::from_utf8_lossy(&compact_sensor.id_string[..id_len])
-                                .trim_matches('\0')
-                                .trim()
-                                .to_string()
-                        } else {
-                            "Unknown".to_string()
-                        }
-                    } else {
-                        "Unknown".to_string()
-                    }
-                }
-                _ => "Unknown".to_string(),
-            };
-
-            // 放宽过滤条件：对于"Unknown"名称，生成基于传感器号的替代名称
-            let final_sensor_name = if sensor_name == "Unknown" || sensor_name.is_empty() {
-                debug5!("Discrete sensor has Unknown/empty name, trying enhanced extraction");
-
-                // 尝试从原始数据中提取名称
-                let extracted_name =
-                    extract_sensor_name_from_full_compact_data(sensor_raw, sdr_record_type);
-
-                if !extracted_name.is_empty() && extracted_name != "Unknown" {
-                    extracted_name
-                } else {
-                    format!(
-                        "Discrete_{:02X}",
-                        if let Ok(common_sensor) = SdrRecordCommonSensor::from_le_bytes(sensor_raw)
-                        {
-                            common_sensor.keys.sensor_num
-                        } else {
-                            0
-                        }
-                    )
-                }
-            } else {
-                sensor_name
-            };
-
-            // Set sensor name in SensorReading
-            let name_bytes = final_sensor_name.as_bytes();
-            let copy_len = name_bytes.len().min(sr.s_id.len() - 1);
-            sr.s_id[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
-
-            // Mark as discrete sensor with basic info
-            sr.s_reading_valid = false;
-            sr.s_reading_unavailable = true;
-            sr.s_has_analog_value = false;
-
-            // Try to get sensor reading for discrete sensors
-            if let Ok(common_sensor) = SdrRecordCommonSensor::from_le_bytes(sensor_raw) {
-                let rsp = ipmi_sdr_get_sensor_reading_ipmb(
-                    intf,
-                    common_sensor.keys.sensor_num,
-                    common_sensor.keys.owner_id,
-                    common_sensor.keys.lun(),
-                    common_sensor.keys.channel(),
-                );
-
-                if let Some(reading_rsp) = rsp {
-                    if reading_rsp.ccode == 0 && reading_rsp.data_len >= 1 {
-                        sr.s_reading = reading_rsp.data[0];
-                        sr.s_reading_valid = true;
-                        if reading_rsp.data_len >= 2 {
-                            sr.s_data2 = reading_rsp.data[2];
-                        }
-                        if reading_rsp.data_len >= 3 {
-                            sr.s_data3 = reading_rsp.data[3];
-                        }
-                    }
-                }
-            }
-
-            sr
-        }
-    };
-
-   // 构建输出字符串 - 根据verbose模式选择格式
-   //let binding = String::from_utf8_lossy(&sr.s_id);
-   //let sensor_name = binding.trim_matches('\0').trim();
-    // 仅截断到第一个 NUL(0x00)，保留尾部空格以复现 ipmitool 的间距
-    let zero_pos = sr
-        .s_id
-        .iter()
-        .position(|&b| b == 0)
-        .unwrap_or(sr.s_id.len());
-    let sensor_name = String::from_utf8_lossy(&sr.s_id[..zero_pos]).to_string();
-
-   if _ctx.verbose >= 1 {
-       // -v和-vv都显示详细格式（调试信息差异主要在SDR读取过程）
-       ipmi_sensor_print_fc_discrete_verbose(intf, &sr, sensor_raw, sdr_record_type);
-   } else {
-
-       if sr.s_reading_valid {
-            // 状态值格式完全匹配C版本：0x{data2:02x}{data3:02x}
-            let status_str = format!("0x{:02x}{:02x}", sr.s_data2, sr.s_data3);
-
-            println!(
-                "{:<16} | 0x{:<8x} | {:<10} | {:<6}| {:<9} | {:<9} | {:<9} | {:<9} | {:<9} | {:<9} ",
-                sensor_name,
-                sr.s_reading,
-                "discrete",
-                status_str,
-                "na",
-                "na",
-                "na",
-                "na",
-                "na",
-                "na"
-            );
-
-
-
-
-       } else {
-           // 无读数的离散传感器
-           println!(
-               "{:<16} | 0x{:<8x} | {:<10} | 0x{:04x}| {:<9} | {:<9} | {:<9} | {:<9} | {:<9} | {:<9}",
-               sensor_name,
-               0,
-               "discrete",
-               //0x0080, // Default status
-   	   "na",
-               "na",
-               "na",
-               "na",
-                "na",
-                "na",
-                "na"
-            );
-        }
-    }
-
-    true
-}
-
-
-//bgz
-pub fn ipmi_sensor_print_fc_discrete(
-    intf: &mut dyn IpmiIntf,
-    sensor_raw: &[u8],
-    sdr_record_type: u8,
-) -> bool {
-    let _ctx = intf.context().output_config().clone();
-    let sr: SensorReading = match ipmi_sdr_read_sensor_value(intf, sensor_raw, sdr_record_type, 3) {
-        Some(val) => {
-            // Check if sensor name is valid
-            let binding = String::from_utf8_lossy(&val.s_id);
             let sensor_name = binding.trim_matches('\0').trim();
++    // 仅截断到第一个 NUL(0x00)，保留尾部空格以复现 ipmitool 的间距
++    let zero_pos = sr
++        .s_id
++        .iter()
++        .position(|&b| b == 0)
++        .unwrap_or(sr.s_id.len());
++    let sensor_name = String::from_utf8_lossy(&sr.s_id[..zero_pos]).to_string();
             if sensor_name.is_empty() {
                 debug5!("Discrete sensor has empty name but continuing with basic display");
                 // Don't return false, continue to display this sensor with fallback info
@@ -990,56 +758,51 @@ pub fn ipmi_sensor_print_fc_discrete(
     };
 
     // 构建输出字符串 - 根据verbose模式选择格式
-    let binding = String::from_utf8_lossy(&sr.s_id);
-    let sensor_name = binding.trim_matches('\0').trim();
+    //let binding = String::from_utf8_lossy(&sr.s_id);
+    //let sensor_name = binding.trim_matches('\0').trim();
++    // 仅截断到第一个 NUL(0x00)，保留尾部空格以复现 ipmitool 的间距
++    let zero_pos = sr
++        .s_id
++        .iter()
++        .position(|&b| b == 0)
++        .unwrap_or(sr.s_id.len());
++    let sensor_name = String::from_utf8_lossy(&sr.s_id[..zero_pos]).to_string();
 
     if _ctx.verbose >= 1 {
         // -v和-vv都显示详细格式（调试信息差异主要在SDR读取过程）
         ipmi_sensor_print_fc_discrete_verbose(intf, &sr, sensor_raw, sdr_record_type);
     } else {
-        /*
-            // 使用与原始 ipmitool 一致的简单格式
-            if sr.s_reading_valid {
-                println!(
-                    "{:<16} | {:<17} | {:<6}",
-                    sensor_name, "discrete", "ok"
-                );
-            } else {
-                // 无读数的离散传感器
-                println!(
-                    "{:<16} | {:<17} | {:<6}",
-                    sensor_name, "no reading", "ns"
-                );
-            }
-        */
 
-        //bgz  上面if else替换为下面内容
-        // 在ipmi_sensor_print_fc_discrete函数中 - 使用10列格式匹配ipmitool
         if sr.s_reading_valid {
-            // 状态值格式完全匹配C版本：0x{data2:02x}{data3:02x}
-            let status_str = format!("0x{:02x}{:02x}", sr.s_data2, sr.s_data3);
++            // 状态值格式完全匹配C版本：0x{data2:02x}{data3:02x}
++            let status_str = format!("0x{:02x}{:02x}", sr.s_data2, sr.s_data3);
 
-            println!(
-                "{:<16} | 0x{:<8x} | {:<10} | {:<6}| {:<9} | {:<9} | {:<9} | {:<9} | {:<9} | {:<9} ",
-                sensor_name,
-                sr.s_reading,
-                "discrete",
-                status_str,
-                "na",
-                "na",
-                "na",
-                "na",
-                "na",
-                "na"
-            );
+             println!(
++                "{:<16} | 0x{:<8x} | {:<10} | {:<6}| {:<9} | {:<9} | {:<9} | {:<9} | {:<9} | {:<9} ",
++                sensor_name,
++                sr.s_reading,
++                "discrete",
++                status_str,
++                "na",
++                "na",
++                "na",
++                "na",
++                "na",
++                "na"
+             );
+
+
+
+
         } else {
-            // 无读数的离散传感器也使用10列格式
+            // 无读数的离散传感器
             println!(
-                "{:<16} | 0x{:<8x} | {:<10} | {:<6}| {:<9} | {:<9} | {:<9} | {:<9} | {:<9} | {:<9}",
+                "{:<16} | 0x{:<8x} | {:<10} | 0x{:04x}| {:<9} | {:<9} | {:<9} | {:<9} | {:<9} | {:<9}",
                 sensor_name,
                 0,
                 "discrete",
-                "na", // 匹配ipmitool的na状态
+                //0x0080, // Default status
+		   "na",
                 "na",
                 "na",
                 "na",
@@ -1053,148 +816,6 @@ pub fn ipmi_sensor_print_fc_discrete(
     true
 }
 
-/*
-pub fn ipmi_sensor_print_eventonly(intf: &mut dyn IpmiIntf, sensor_raw: &[u8]) -> bool {
-    let _ctx = intf.context().output_config().clone();
-    let sensor = match SdrRecordEventonlySensor::from_le_bytes(sensor_raw) {
-        Ok(s) => s,
-        Err(e) => {
-            debug5!("Error: Failed to parse event-only sensor record: {}", e);
-            return false;
-        }
-    };
-
-    // 增强的传感器名称提取逻辑
-    let mut id_len = (sensor.id_code & 0x1f) as usize;
-
-    // 第一次尝试：使用id_code指定的长度
-    if id_len == 0 {
-        // 第二次尝试：扫描整个id_string数组找到实际的字符串长度
-        for i in 0..16.min(sensor.id_string.len()) {
-            if sensor.id_string[i] == 0 {
-                id_len = i;
-                break;
-            }
-            // 检查是否为可打印ASCII字符
-            if sensor.id_string[i] < 0x20 || sensor.id_string[i] > 0x7e {
-                id_len = i;
-                break;
-            }
-            if i == 15 {
-                // 到了末尾，检查所有字符是否都是可打印的
-                if sensor.id_string.iter().all(|&b| (0x20..=0x7e).contains(&b)) {
-                    id_len = 16;
-                } else {
-                    id_len = 0;
-                }
-            }
-        }
-    }
-
-    // 第三次尝试：从传感器原始数据中直接提取名称
-    let sensor_name = if id_len > 0 && id_len <= sensor.id_string.len() {
-        let extracted_name = String::from_utf8_lossy(&sensor.id_string[..id_len])
-            .trim_matches('\0')
-            .trim()
-            .to_string();
-
-        // 验证提取的名称是否有效
-        if !extracted_name.is_empty()
-            && extracted_name
-                .chars()
-                .all(|c| c.is_ascii() && !c.is_control())
-        {
-            extracted_name
-        } else {
-            // 第四次尝试：尝试从原始数据的不同偏移位置提取名称
-            extract_sensor_name_from_raw_data(sensor_raw, sensor.keys.sensor_num)
-        }
-    } else {
-        // 第四次尝试：尝试从原始数据的不同偏移位置提取名称
-        extract_sensor_name_from_raw_data(sensor_raw, sensor.keys.sensor_num)
-    };
-
-    // 第五次尝试：使用传感器号生成fallback名称（仅当其他都失败时）
-    let final_sensor_name = if sensor_name.is_empty() || sensor_name == "Unknown" {
-        debug5!("Event-only sensor name extraction failed, using sensor number fallback");
-        format!("Event_{:02X}", sensor.keys.sensor_num)
-    } else {
-        sensor_name
-    };
-
-    // Try to get sensor reading for event-only sensors
-    let mut reading_value = 0u8;
-    let mut status_value = 0u16;
-    let mut has_reading = false;
-
-    let rsp = ipmi_sdr_get_sensor_reading_ipmb(
-        intf,
-        sensor.keys.sensor_num,
-        sensor.keys.owner_id,
-        sensor.keys.lun(),
-        sensor.keys.channel(),
-    );
-
-    if let Some(reading_rsp) = rsp {
-        if reading_rsp.ccode == 0 && reading_rsp.data_len >= 1 {
-            reading_value = reading_rsp.data[0];
-            has_reading = true;
-            if reading_rsp.data_len >= 2 {
-                status_value = reading_rsp.data[1] as u16;
-                if reading_rsp.data_len >= 3 {
-                    status_value |= (reading_rsp.data[2] as u16) << 8;
-                }
-            }
-        }
-    }
-
-    // Format output based on verbose mode
-    if _ctx.verbose >= 1 {
-        // -v和-vv都显示详细格式（调试信息差异主要在SDR读取过程）
-        ipmi_sensor_print_eventonly_verbose(
-            intf,
-            &final_sensor_name,
-            sensor_raw,
-            reading_value,
-            status_value,
-            has_reading,
-        );
-    } else {
-        // 默认表格格式
-        if has_reading {
-            println!(
-                "{:<16} | 0x{:<8x} | {:<10} | 0x{:04x}| {:<9} | {:<9} | {:<9} | {:<9} | {:<9} | {:<9}",
-                final_sensor_name,
-                reading_value,
-                "discrete",
-                status_value,
-                "na",
-                "na",
-                "na",
-                "na",
-                "na",
-                "na"
-            );
-        } else {
-            println!(
-                "{:<16} | 0x{:<8x} | {:<10} | 0x{:04x}| {:<9} | {:<9} | {:<9} | {:<9} | {:<9} | {:<9}",
-                final_sensor_name,
-                0,
-                "discrete",
-                0x0080, // 匹配ipmitool的默认状态
-                "na",
-                "na",
-                "na",
-                "na",
-                "na",
-                "na"
-            );
-        }
-    }
-
-    true
-}
-*/
 
 //bgz
 pub fn ipmi_sensor_print_eventonly(intf: &mut dyn IpmiIntf, sensor_raw: &[u8]) -> bool {
@@ -1385,90 +1006,456 @@ pub fn ipmi_sensor_print_fc_threshold_verbose(
     sensor_raw: &[u8],
     sdr_record_type: u8,
 ) {
-    let binding = String::from_utf8_lossy(&sr.s_id);
-    let sensor_name = binding.trim_matches('\0').trim();
+    //let binding = String::from_utf8_lossy(&sr.s_id);
+    //let sensor_name = binding.trim_matches('\0').trim();
 
-    // 获取传感器信息
-    let (sensor_num, entity_id, entity_instance, sensor_type) =
-        extract_sensor_info(sensor_raw, sdr_record_type);
+    // 仅截断到第一个 NUL(0x00)，保留尾部空格以匹配 ipmitool
+    let zero_pos = sr
+        .s_id
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(sr.s_id.len());
+    let sensor_name = String::from_utf8_lossy(&sr.s_id[..zero_pos]).to_string();
 
-    // 打印传感器ID行
-    println!(
-        "Sensor ID              : {} (0x{:x})",
-        sensor_name, sensor_num
-    );
-    println!(" Entity ID             : {}.{}", entity_id, entity_instance);
+   // 获取传感器信息
+   let (sensor_num, entity_id, entity_instance, sensor_type) =
+       extract_sensor_info(sensor_raw, sdr_record_type);
 
-    // 获取传感器类型描述
-    let sensor_type_desc = get_sensor_type_description(sensor_type);
-    println!(" Sensor Type (Threshold)  : {}", sensor_type_desc);
+   // 打印传感器ID行
+   println!(
+       "Sensor ID              : {} (0x{:x})",
+       sensor_name, sensor_num
+   );
+   //println!(" Entity ID             : {}.{}", entity_id, entity_instance);
 
-    // 打印传感器读数
-    if sr.s_reading_valid {
-        if sr.s_has_analog_value {
-            // 模拟值传感器
-            println!(
-                " Sensor Reading        : {} (+/- 0) {}",
-                if sr.s_a_val.fract() == 0.0 {
-                    format!("{}", sr.s_a_val as i32)
-                } else {
-                    format!("{:.3}", sr.s_a_val)
-                },
-                sr.s_a_units
-            );
+    // 对齐 ipmitool：sdr -v 显示实体名称，sensor -v 不显示括号名称
+    let entity_name = crate::ipmi::strings::entity_id_to_str(entity_id);
+    if intf.context().output_config().is_from_sdr_list() {
+        println!(
+            " Entity ID             : {}.{} ({})",
+            entity_id, entity_instance, entity_name
+        );
+    } else {
+        println!(" Entity ID             : {}.{}", entity_id, entity_instance);
+    }
+
+
+
+
+
+
+   // 获取传感器类型描述
+   let sensor_type_desc = get_sensor_type_description(sensor_type);
+   //println!(" Sensor Type (Threshold)  : {}", sensor_type_desc);
+
+    // 对齐 ipmitool：sdr -v带类型码，sensor -v不带
+    if intf.context().output_config().is_from_sdr_list() {
+        println!(
+            " Sensor Type (Threshold)  : {} (0x{:02x})",
+            sensor_type_desc, sensor_type
+        );
+    } else {
+        println!(" Sensor Type (Threshold)  : {}", sensor_type_desc);
+    }
+
+   // 打印传感器读数
+   //if sr.s_reading_valid {
+
+    // 打印传感器读数（对齐 ipmitool sdr -v）
+    let ctx = intf.context().output_config().clone();
+
+    // 在阈值型 verbose 输出中：
+    // - 原生 ipmitool 在读数无效(Device Not Present)时，会打印“Sensor Reading”错误行，
+    //   但不会打印 Status/阈值/滞回等读数相关信息；随后仍会打印 Event Status/Enable 等。
+    // - utipmitool 需要对齐该行为。
+    let reading_valid = sr.s_reading_valid;
+
+    if reading_valid {
+
+       if sr.s_has_analog_value {
+           // 模拟值传感器
+           println!(
+               " Sensor Reading        : {} (+/- 0) {}",
+               if sr.s_a_val.fract() == 0.0 {
+                   format!("{}", sr.s_a_val as i32)
+               } else {
+                   format!("{:.3}", sr.s_a_val)
+               },
+               sr.s_a_units
+           );
+
+           // 获取状态
+           //let ctx = intf.context().output_config().clone();
+           //let status = sr.ipmi_sdr_get_thresh_status("na", &ctx);
+           //println!(" Status                : {}", status);
 
             // 获取状态
-            let ctx = intf.context().output_config().clone();
-            let status = sr.ipmi_sdr_get_thresh_status("na", &ctx);
-            println!(" Status                : {}", status);
+            //let ctx = intf.context().output_config().clone();
+            //let status = sr.ipmi_sdr_get_thresh_status("na", &ctx);
+            //println!(" Status                : {}", status);
         } else {
             // 离散传感器值
+            debug5!(
+                "Verbose print: s_reading_valid={}, s_scanning_disabled={}, s_unavailable={}",
+                sr.s_reading_valid,
+                sr.s_scanning_disabled,
+                sr.s_reading_unavailable
+            );
             println!(" Sensor Reading        : 0x{:x}", sr.s_reading);
         }
     } else {
         // 无效读数
-        println!(" Sensor Reading        :  Unable to read sensor: Device Not Present");
-        println!();
-        println!(" Event Status          : Unavailable");
+        // 对齐原生 ipmitool：即使 Device Not Present，也不要提前 return；
+        // 仍需继续打印 Event Status / (Assertions|Deassertions) Enabled 等块。
+        if !intf.context().output_config().is_from_sdr_list() {
+            // sensor -v 路径：保持行首和缩进一致
+            println!(" Sensor Reading        :  Unable to read sensor: Device Not Present");
+            println!("");
+        } else {
+            // sdr -v 路径：保留 Disabled/No Reading 行，并继续打印状态
+            if sr.s_scanning_disabled {
+                println!(" Sensor Reading        : Disabled");
+            } else {
+                println!(" Sensor Reading        : No Reading");
+            }
+        }
+    }
+    // 仅在读数有效时打印 Status；无读数(Device Not Present)时 ipmitool 不打印该行
+    if reading_valid {
+        let status = sr.ipmi_sdr_get_thresh_status("Not Available", &ctx);
+        println!(" Status                : {}", status);
+    }
+
+    // 打印标准值：Nominal/Normal Min/Max，仅在 sdr list 路径打印（与 ipmitool sdr -v 对齐）
+    if intf.context().output_config().is_from_sdr_list() {
+        if let Some(ref full) = sr.full {
+            let is_discrete = full.cmn.are_discrete();
+            // bit0: nominal_read present
+            if (full.analog_flag & 0x01) != 0 {
+                if is_discrete {
+                    println!(" {:<21} : 0x{:02X}", "Nominal Reading", full.nominal_read);
+                } else {
+                    let v = full.sdr_convert_sensor_reading(full.nominal_read);
+                    println!(" {:<21} : {:.3}", "Nominal Reading", v);
+                }
+            }
+            // bit2: normal_min present
+            if (full.analog_flag & 0x04) != 0 {
+                if is_discrete {
+                    println!(" {:<21} : 0x{:02X}", "Normal Minimum", full.normal_min);
+                } else {
+                    let v = full.sdr_convert_sensor_reading(full.normal_min);
+                    println!(" {:<21} : {:.3}", "Normal Minimum", v);
+                }
+            }
+            // bit1: normal_max present
+            if (full.analog_flag & 0x02) != 0 {
+                if is_discrete {
+                    println!(" {:<21} : 0x{:02X}", "Normal Maximum", full.normal_max);
+                } else {
+                    let v = full.sdr_convert_sensor_reading(full.normal_max);
+                    println!(" {:<21} : {:.3}", "Normal Maximum", v);
+                }
+            }
+        }
+    }
+
+    // 阈值打印：
+    // - sdr -v 路径：只打印实际存在的阈值项（不补 na），顺序与 ipmitool 一致；用于对齐你提供的 ARM 截图
+    // - sensor -v 路径：打印完整六行，缺失则打印 na（保持原有行为）
+    if intf.context().output_config().is_from_sdr_list() {
+        if let Some(ref full) = sr.full {
+            // sdr -v 路径对齐 ipmitool：要求 init.flags 含 THRESHOLDS，且按 SDR ReadMask 打印存在的阈值
+            if let Ok(sensor) = SdrRecordCommonSensor::from_le_bytes(sensor_raw) {
+                // 与 ipmitool lib/ipmi_sdr.c 的 SENSOR_PRINT_THRESH 等价：
+                // 仅当 FULLSENS->cmn.sensor.init.thresholds 置位且 read mask 对应位存在时打印值
+                if sensor.sensor.init.contains(InitFlags::THRESHOLDS) {
+                    let rf = sensor.mask.threshold.read();
+
+                    if rf.contains(ReadFlags::UNR) {
+                        let v = full.sdr_convert_sensor_reading(full.threshold.upper.non_recover);
+                        println!(" {:<21} : {:.3}", "Upper non-recoverable", v);
+                    }
+                    if rf.contains(ReadFlags::UCR) {
+                        let v = full.sdr_convert_sensor_reading(full.threshold.upper.critical);
+                        println!(" {:<21} : {:.3}", "Upper critical", v);
+                    }
+                    if rf.contains(ReadFlags::UNC) {
+                        let v = full.sdr_convert_sensor_reading(full.threshold.upper.non_critical);
+                        println!(" {:<21} : {:.3}", "Upper non-critical", v);
+                    }
+                    if rf.contains(ReadFlags::LNR) {
+                        let v = full.sdr_convert_sensor_reading(full.threshold.lower.non_recover);
+                        println!(" {:<21} : {:.3}", "Lower non-recoverable", v);
+                    }
+                    if rf.contains(ReadFlags::LCR) {
+                        let v = full.sdr_convert_sensor_reading(full.threshold.lower.critical);
+                        println!(" {:<21} : {:.3}", "Lower critical", v);
+                    }
+                    if rf.contains(ReadFlags::LNC) {
+                        let v = full.sdr_convert_sensor_reading(full.threshold.lower.non_critical);
+                        println!(" {:<21} : {:.3}", "Lower non-critical", v);
+                    }
+                }
+            }
+        }
+    } else {
+        // sensor -v 路径：仅在读数有效时打印 6 行阈值；无读数时 ipmitool 不打印
+        if !reading_valid {
+            // 跳过阈值打印
+        } else {
+            if let Some(ref full) = sr.full {
+                // 使用传入的阈值响应掩码，数据格式与 ipmitool 一致：data[0] 为存在位掩码，后续字节为各阈值
+                let mut has_rsp = false;
+                let mut mask = 0u8;
+                let mut data: [u8; 8] = [0; 8];
+                if _rsp.data_len > 0 {
+                    has_rsp = true;
+                    mask = _rsp.data[0];
+                    for i in 0.._rsp.data_len.min(7) as usize {
+                        data[i] = _rsp.data[i];
+                    }
+                }
+
+                let print_thresh = |label: &str, bit: u8, idx: usize| {
+                    if has_rsp && (mask & bit) != 0 {
+                        let v = full.sdr_convert_sensor_reading(data[idx] as u8);
+                        println!(" {:<21} : {:.3}", label, v);
+                    } else {
+                        println!(" {:<21} : na", label);
+                    }
+                };
+
+                // 顺序严格对齐 ipmitool
+                print_thresh("Lower Non-Recoverable", LOWER_NON_RECOV_SPECIFIED, 3);
+                print_thresh("Lower Critical", LOWER_CRIT_SPECIFIED, 2);
+                print_thresh("Lower Non-Critical", LOWER_NON_CRIT_SPECIFIED, 1);
+                print_thresh("Upper Non-Critical", UPPER_NON_CRIT_SPECIFIED, 4);
+                print_thresh("Upper Critical", UPPER_CRIT_SPECIFIED, 5);
+                print_thresh("Upper Non-Recoverable", UPPER_NON_RECOV_SPECIFIED, 6);
+            } else {
+                // 无 full 记录时，仍保持行位次并打印 na
+                println!(" {:<21} : na", "Lower Non-Recoverable");
+                println!(" {:<21} : na", "Lower Critical");
+                println!(" {:<21} : na", "Lower Non-Critical");
+                println!(" {:<21} : na", "Upper Non-Critical");
+                println!(" {:<21} : na", "Upper Critical");
+                println!(" {:<21} : na", "Upper Non-Recoverable");
+            }
+        }
+    }
+    // 打印滞回信息（只有在阈值可用时）
+    //println!(" {:<21} : Unspecified", "Positive Hysteresis");
+    //println!(" {:<21} : Unspecified", "Negative Hysteresis");
+    // 与 ipmitool一致：若支持hysteresis且值非0则转换显示，否则Unspecified
+    // Hysteresis：sensor -v 路径仅在读数有效时打印；无读数时 ipmitool 不打印
+    if !intf.context().output_config().is_from_sdr_list() && !reading_valid {
+        // skip
+    } else if let Ok(sensor) = SdrRecordCommonSensor::from_le_bytes(sensor_raw) {
+        let hysteresis_cap = sensor.sensor.capabilities.hysteresis();
+        if let Some(ref full) = sr.full {
+            let pos = full.threshold.hysteresis.positive;
+            let neg = full.threshold.hysteresis.negative;
+            if hysteresis_cap != 0 && pos != 0 {
+                let v = full.sdr_convert_sensor_reading(pos);
+                println!(" {:<21} : {:.3}", "Positive Hysteresis", v);
+            } else {
+                println!(" {:<21} : Unspecified", "Positive Hysteresis");
+            }
+            if hysteresis_cap != 0 && neg != 0 {
+                let v = full.sdr_convert_sensor_reading(neg);
+                println!(" {:<21} : {:.3}", "Negative Hysteresis", v);
+            } else {
+                println!(" {:<21} : Unspecified", "Negative Hysteresis");
+            }
+        } else {
+            // Compact 记录
+            if let Some(ref compact) = sr.compact {
+                let pos = compact.threshold.hysteresis.positive;
+                let neg = compact.threshold.hysteresis.negative;
+                // 无 full 转换函数时，保持 Unspecified（与多数BMC行为一致）
+                println!(
+                    " {:<21} : {}",
+                    "Positive Hysteresis",
+                    if hysteresis_cap != 0 && pos != 0 {
+                        "Unspecified"
+                    } else {
+                        "Unspecified"
+                    }
+                );
+                println!(
+                    " {:<21} : {}",
+                    "Negative Hysteresis",
+                    if hysteresis_cap != 0 && neg != 0 {
+                        "Unspecified"
+                    } else {
+                        "Unspecified"
+                    }
+                );
+            } else {
+                println!(" {:<21} : Unspecified", "Positive Hysteresis");
+                println!(" {:<21} : Unspecified", "Negative Hysteresis");
+            }
+        }
+    } else {
+        println!(" {:<21} : Unspecified", "Positive Hysteresis");
+        println!(" {:<21} : Unspecified", "Negative Hysteresis");
+    }
+
+    // 传感器范围：仅在 sdr list 路径打印 Minimum/Maximum sensor range（与 ipmitool sdr -v 对齐）
+    if intf.context().output_config().is_from_sdr_list() {
+        if let Some(ref full) = sr.full {
+            let unit_analog = full.cmn.unit.analog();
+            let is_analog = !full.cmn.are_discrete();
+
+            // Minimum
+            let mut min_unspecified = false;
+            if (unit_analog == 0 && full.sensor_min == 0x00)
+                || (unit_analog == 1 && full.sensor_min == 0xff)
+                || (unit_analog == 2 && full.sensor_min == 0x80)
+            {
+                min_unspecified = true;
+            }
+            let min_creading = if is_analog {
+                full.sdr_convert_sensor_reading(full.sensor_min)
+            } else {
+                0.0
+            };
+            if is_analog && min_creading == 0.0 {
+                min_unspecified = true;
+            }
+
+            if min_unspecified {
+                println!(" {:<21} : Unspecified", "Minimum sensor range");
+            } else if is_analog {
+                println!(" {:<21} : {:.3}", "Minimum sensor range", min_creading);
+            } else {
+                println!(
+                    " {:<21} : 0x{:02X}",
+                    "Minimum sensor range", full.sensor_min
+                );
+            }
+
+            // Maximum
+            let mut max_unspecified = false;
+            if (unit_analog == 0 && full.sensor_max == 0xff)
+                || (unit_analog == 1 && full.sensor_max == 0x00)
+                || (unit_analog == 2 && full.sensor_max == 0x7f)
+            {
+                max_unspecified = true;
+            }
+            let max_creading = if is_analog {
+                full.sdr_convert_sensor_reading(full.sensor_max)
+            } else {
+                0.0
+            };
+            if is_analog && max_creading == 0.0 {
+                max_unspecified = true;
+            }
+
+            if max_unspecified {
+                println!(" {:<21} : Unspecified", "Maximum sensor range");
+            } else if is_analog {
+                println!(" {:<21} : {:.3}", "Maximum sensor range", max_creading);
+            } else {
+                println!(
+                    " {:<21} : 0x{:02X}",
+                    "Maximum sensor range", full.sensor_max
+                );
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+        } else {
+            // 离散传感器值
+           //println!(" Sensor Reading        : 0x{:x}", sr.s_reading);
+            // sdr路径下无full记录，保持行位次
+            println!(" {:<21} : Unspecified", "Minimum sensor range");
+            println!(" {:<21} : Unspecified", "Maximum sensor range");
+       }
+
     }
 
     // 打印阈值信息
-    if thresh_available && sr.s_reading_valid {
+//    if thresh_available && sr.s_reading_valid {
         // 只有当传感器读数有效时才显示阈值信息
-        if let Ok(sensor) = SdrRecordCommonSensor::from_le_bytes(sensor_raw) {
-            let thresh_rsp = ipmi_sdr_get_sensor_thresholds(
-                intf,
-                sensor.keys.sensor_num,
-                sensor.keys.owner_id,
-                sensor.keys.lun(),
-                sensor.keys.channel(),
-            );
 
-            if let Some(rsp) = thresh_rsp {
-                if rsp.ccode == 0 && rsp.data_len > 0 {
-                    // 定义阈值映射 (使用原来的逻辑但修复格式)
-                    let thresholds = [
-                        (LOWER_NON_RECOV_SPECIFIED, 3, "Lower Non-Recoverable"),
-                        (LOWER_CRIT_SPECIFIED, 2, "Lower Critical"),
-                        (LOWER_NON_CRIT_SPECIFIED, 1, "Lower Non-Critical"),
-                        (UPPER_NON_CRIT_SPECIFIED, 4, "Upper Non-Critical"),
-                        (UPPER_CRIT_SPECIFIED, 5, "Upper Critical"),
-                        (UPPER_NON_RECOV_SPECIFIED, 6, "Upper Non-Recoverable"),
-                    ];
+    //println!(" {:<21} : ", "Assertion Events");
 
-                    for (bit_mask, data_idx, name) in thresholds {
-                        let is_avail = rsp.data[0] & bit_mask != 0;
-                        if is_avail && data_idx < rsp.data.len() {
-                            let data = rsp.data[data_idx];
-                            if let Some(ref full) = sr.full {
-                                let thresh_val = full.print_thresh_setting(true, data, "");
-                                println!(" {:<21} : {}", name, thresh_val.trim());
-                            } else {
-                                println!(" {:<21} : na", name);
-                            }
-                        } else {
-                            println!(" {:<21} : na", name);
-                        }
+    // 在断言前输出：Event Message Control / Readable Thresholds / Settable Thresholds / Threshold Read Mask
+    // 仅在 sdr list 路径打印（与 ipmitool sdr -v 对齐）
+    if intf.context().output_config().is_from_sdr_list() {
+
+       if let Ok(sensor) = SdrRecordCommonSensor::from_le_bytes(sensor_raw) {
+            // Event Message Control
+            let em = sensor.sensor.capabilities.event_msg();
+            print!(" Event Message Control : ");
+            match em {
+                0 => println!("Per-threshold"),
+                1 => println!("Entire Sensor Only"),
+                2 => println!("Global Disable Only"),
+                3 => println!("No Events From Sensor"),
+                _ => println!("Unknown"),
+            }
+
+
+
+            // Readable Thresholds
+            print!(" Readable Thresholds   : ");
+            match sensor.sensor.capabilities.threshold() {
+                0 => println!("No Thresholds"),
+                1 | 2 => {
+                    let rf = sensor.mask.threshold.read();
+                    let mut any = false;
+                    if rf.contains(ReadFlags::LNR) {
+                        print!("lnr ");
+                        any = true;
+                    }
+                    if rf.contains(ReadFlags::LCR) {
+                        print!("lcr ");
+                        any = true;
+                    }
+                    if rf.contains(ReadFlags::LNC) {
+                        print!("lnc ");
+                        any = true;
+                    }
+                    if rf.contains(ReadFlags::UNC) {
+                        print!("unc ");
+                        any = true;
+                    }
+                    if rf.contains(ReadFlags::UCR) {
+                        print!("ucr ");
+                        any = true;
+                    }
+                    if rf.contains(ReadFlags::UNR) {
+                        print!("unr ");
+                        any = true;
+                    }
+                    //if any { println!(""); } else { println!("No Thresholds"); }
+                    // 与 ipmitool 一致：当支持但掩码为空时打印空行
+                    if any {
+                        println!("");
+                    } else {
+                        println!("");
+                    }
+                }
+                3 => println!("Thresholds Fixed"),
+                _ => println!("No Thresholds"),
+
+
+
+
+
+
                     }
                 }
             }
