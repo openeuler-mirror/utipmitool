@@ -36,6 +36,7 @@ impl OutputContext {
             extended: false,
             include_event_only: false,
             from_sdr_list: false,
+            simple_sdr_list: false,
         }
     }
 
@@ -47,6 +48,7 @@ impl OutputContext {
             extended,
             include_event_only: false,
             from_sdr_list: false,
+            simple_sdr_list: false,
         }
     }
 
@@ -70,6 +72,12 @@ impl OutputContext {
     /// 设置扩展格式（链式调用）
     pub fn with_extended(mut self, extended: bool) -> Self {
         self.extended = extended;
+        self
+    }
+
+    /// 设置 sdr list 简洁模式（链式调用）
+    pub fn with_simple_sdr_list(mut self, simple: bool) -> Self {
+        self.simple_sdr_list = simple;
         self
     }
 
@@ -115,6 +123,11 @@ impl OutputContext {
         self.from_sdr_list
     }
 
+    /// 是否启用 sdr list 简洁模式
+    pub fn is_simple_sdr_list(&self) -> bool {
+        self.simple_sdr_list
+    }
+
     /// 设置扩展格式输出（可变引用方式）
     pub fn set_extended(&mut self, extended: bool) {
         self.extended = extended;
@@ -138,6 +151,11 @@ impl OutputContext {
     /// 设置调用来源为 sdr list
     pub fn set_from_sdr_list(&mut self, from_sdr: bool) {
         self.from_sdr_list = from_sdr;
+    }
+
+    /// 设置 sdr list 简洁模式
+    pub fn set_simple_sdr_list(&mut self, simple: bool) {
+        self.simple_sdr_list = simple;
     }
 }
 
