@@ -24,15 +24,14 @@ use utipmitool::ipmi::vita::*;
 use utipmitool::VERBOSE_LEVEL;
 
 use utipmitool::debug;
-// use utipmitool::debug1;
-use utipmitool::debug2;
-use utipmitool::debug3;
-use utipmitool::logging;
+
+// use utipmitool::logging;
 //use ipmi_tool::log;
-use utipmitool::interface::open::open::IPMI_BMC_CHANNEL;
 use utipmitool::ipmi::context::{IpmiBaseContext, OutputContext, ProtocolContext};
 use utipmitool::ipmi::intf::{IpmiContext, IpmiIntf, IpmiIntfExt};
 use utipmitool::ipmi::ipmi::IPMI_BMC_SLAVE_ADDR;
+use utipmitool::logger::{init_logger, set_log_level, LogConfig, LogLevel};
+use utipmitool::{log_debug, log_info};
 
 fn main() {
     //setup_logger().expect("Failed to initialize logger");
@@ -52,7 +51,7 @@ fn main() {
 
     // 添加在函数开头，在解析命令行参数前
     use crate::debug_control;
-    debug_control::hide_loading_interface_message(); // 隐藏"Loading interface: Open"信息
+    // debug_control::hide_loading_interface_message(); // 隐藏"Loading interface: Open"信息
 
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
@@ -115,15 +114,20 @@ fn main() {
             err.exit();
         }
     };
-    logging::setup_logger(cli.global.verbose);
-    // debug1!("More detailed info");  // 需要至少1个-v
-    // debug2!("Even more info");      // 需要至少2个-v
-    // debug3!("Most detailed info");  // 需要至少3个-v
-    // log::error!("log::error");
-    // log::info!("log::info");
-    // log::debug!("log::debug");
-    // log::warn!("log::warn");
-    // log::trace!("log::trace");
+
+    if let Some(username) = &cli.global.username {
+        if username.len() > 16 {
+            eprintln!("Username is too long (> 16 bytes)");
+            std::process::exit(1);
+        }
+    }
+
+    init_logger(LogConfig {
+        level: LogLevel::Debug,
+        use_colors: true,
+        use_timestamps: false,
+    });
+    set_log_level(cli.global.verbose);
 
     VERBOSE_LEVEL.store(cli.global.verbose as usize, Ordering::Relaxed);
 
@@ -151,9 +155,9 @@ fn main() {
                 IPMI_BMC_SLAVE_ADDR
             },
             target_addr: 0, // 默认目标地址为0
-            target_channel: IPMI_BMC_CHANNEL,
+            target_channel: 0,
             target_lun: 0,
-            target_ipmb_addr: IPMI_BMC_SLAVE_ADDR as u8,
+            target_ipmb_addr: 0,
         },
         bridging: None,
         protocol: ProtocolContext::default(),
@@ -162,7 +166,7 @@ fn main() {
     };
 
     // 加载接口
-    debug3!("Loading interface: {:?}", cli.global.interface);
+    // log_info!("Loading interface: {:?}", cli.global.interface);
     let mut intf = match cli.global.interface {
         InterfaceType::Open => {
             //ipmi_intf_load
@@ -184,17 +188,17 @@ fn main() {
         eprintln!("{}", e);
         return;
     }
-    debug3!("Interface opened successfully");
+    // log_info!("Interface opened successfully");
 
     // -vv级别的调试信息：开始获取IPMB地址
-    debug2!("Acquire IPMB address");
+    // log_debug!("Acquire IPMB address");
 
-    let (final_addr, target_ipmb_addr) = if cli.global.arg_addr == 0 {
+    let final_addr = if cli.global.arg_addr == 0 {
         let addr = ipmi_acquire_ipmb_address(intf.as_mut());
-        (addr, addr)
+        addr
     } else {
-        let ipmb = ipmi_acquire_ipmb_address(intf.as_mut());
-        (cli.global.arg_addr, ipmb)
+        // let ipmb = ipmi_acquire_ipmb_address(intf.as_mut());
+        cli.global.arg_addr
     };
 
     // 当最终地址有效且与接口当前地址不同时更新
@@ -229,30 +233,22 @@ fn main() {
     });
 
     intf.with_context(|ctx| {
-        ctx.set_target_ipmb_addr(target_ipmb_addr);
-        debug3!(
-            "Specified addressing     Target  0x{:02x}:0x{:02x} Transit 0x{:02x}:0x{:02x}",
-            ctx.target_addr(),
-            ctx.target_channel(),
-            ctx.transit_addr(),
-            ctx.transit_channel()
-        );
+        // ctx.set_target_ipmb_addr(target_ipmb_addr);
+        // if ctx.transit_addr() > 0 || ctx.target_addr() > 0 {
+        //     log_debug!(
+        //         "Specified addressing     Target  0x{:02x}:0x{:02x} Transit 0x{:02x}:0x{:02x}",
+        //         ctx.target_addr(),
+        //         ctx.target_channel(),
+        //         ctx.transit_addr(),
+        //         ctx.transit_channel()
+        //     );
+        // }
         // Align with ipmitool: print a single discovery line at -v before first sensor output
         // Moved to sensor list path to avoid printing during `sdr list`.
 
         // -vv级别的调试信息：接口地址信息
-        debug2!(
-            "Interface address: my_addr 0x{:02x} transit {}:{} target 0x{:02x}:{} ipmb_target {}",
-            ctx.my_addr(),
-            ctx.transit_addr(),
-            ctx.transit_channel(),
-            ctx.target_addr(),
-            ctx.target_channel(),
-            ctx.target_ipmb_addr()
-        );
-
-        debug3!(
-            "Interface address: 0x{:02x}\n                transit {}:{} target {}:{}\n                ipmb_target 0x{:02x}",
+        log_debug!(
+            "Interface address: my_addr 0x{:02x}  transit 0x{:02x}:0x{:02x}  target 0x{:02x}:0x{:02x}  ipmb_target 0x{:02x}",
             ctx.my_addr(),
             ctx.transit_addr(),
             ctx.transit_channel(),
@@ -260,6 +256,7 @@ fn main() {
             ctx.target_channel(),
             ctx.target_ipmb_addr(),
         );
+        // println!();
     });
 
     // let verbose = VERBOSE_LEVEL.load(Ordering::Relaxed) > 0;
@@ -336,26 +333,30 @@ fn main() {
 fn ipmi_acquire_ipmb_address(intf: &mut dyn IpmiIntf) -> u8 {
     // 获取和显示IANA厂商ID
     let actual_id = get_manufacturer_id_from_device(intf);
-    if actual_id != 0 {
-        debug2!("Iana: {}", actual_id);
-    }
+    
+    log_debug!("Iana: {}", actual_id);
+    log_debug!("");
+    
 
     // 先尝试 PICMG 扩展
     if picmg_discover(intf) != 0 {
+        log_debug!("Acquire IPMB address");
         let addr = ipmi_picmg_ipmb_address(intf);
-        debug2!("Discovered IPMB address 0x{:02x}", addr);
+        log_info!("Discovered IPMB address 0x{:02x}", addr);
         return addr;
     }
 
     // 尝试 VITA 扩展
     if vita_discover(intf) != 0 {
+        log_debug!("Acquire IPMB address");
         let addr = ipmi_vita_ipmb_address(intf);
-        debug2!("Discovered IPMB address 0x{:02x}", addr);
+        log_info!("Discovered IPMB address 0x{:02x}", addr);
         return addr;
     }
 
     // 默认返回0
-    debug2!("Discovered IPMB address 0x0");
+    log_debug!("Acquire IPMB address");
+    log_info!("Discovered IPMB address 0x0");
     0
 }
 
