@@ -7,7 +7,7 @@
 use crate::commands::chassis::{MBOX_PARSE_ALLBLOCKS, MBOX_PARSE_USE_TEXT};
 use crate::commands::CommandResult;
 use crate::error::IpmiError;
-use crate::error::{oem2str, IPMI_OEM_INFO};
+use crate::error::{completion_code_to_string, oem_id_to_string};
 use crate::helper::{buf2str, ipmi24toh};
 use crate::ipmi::constants::{
     IPMI_CHASSIS_BOOTPARAM_INFO_ACK, IPMI_CHASSIS_BOOTPARAM_SET_IN_PROGRESS,
@@ -311,8 +311,7 @@ pub fn ipmi_chassis_set_bootparam(
         Some(rsp) => {
             if rsp.ccode != 0 {
                 // 完全匹配ipmitool的错误格式
-                let error_desc =
-                    crate::error::val2str(rsp.ccode, &crate::error::COMPLETION_CODE_VALS);
+                let error_desc = completion_code_to_string(rsp.ccode);
                 // 如果错误描述是"Unknown value"，显示格式为"Unknown (0xXX)"
                 let formatted_error = if error_desc == "Unknown value" {
                     format!("Unknown (0x{:02x})", rsp.ccode)
@@ -445,11 +444,7 @@ fn chassis_bootmailbox_parse(buf: Option<&[u8]>, flags: u32) {
 
     if mbox.block == 0 {
         let iana = ipmi24toh(&mbox.b0.iana);
-        println!(
-            " IANA PEN       : {} [{}]",
-            iana,
-            oem2str(iana, &IPMI_OEM_INFO)
-        );
+        println!(" IANA PEN       : {} [{}]", iana, oem_id_to_string(iana));
         blockdata = &mbox.b0.data[..];
         datalen -= std::mem::size_of::<[u8; 3]>();
     }
