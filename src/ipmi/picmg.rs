@@ -5,11 +5,11 @@
  */
 
 use crate::debug2;
-use crate::debug3;
 use crate::error::IpmiError;
 use crate::ipmi::intf::IpmiIntf;
 use crate::ipmi::ipmi::*;
-
+use crate::log_debug;
+use crate::log_info;
 // PICMG 版本常量
 pub const PICMG_CPCI_MAJOR_VERSION: u8 = 1;
 pub const PICMG_ATCA_MAJOR_VERSION: u8 = 2;
@@ -73,7 +73,7 @@ pub fn ipmi_picmg_ipmb_address(intf: &mut dyn IpmiIntf) -> u8 {
     let rsp = match intf.sendrecv(&req) {
         Some(r) => r,
         None => {
-            debug3!("Get Address Info failed: No Response");
+            log_info!("Get Address Info failed: No Response");
             return 0;
         }
     };
@@ -83,18 +83,18 @@ pub fn ipmi_picmg_ipmb_address(intf: &mut dyn IpmiIntf) -> u8 {
     }
 
     if rsp.ccode != 0 {
-        debug3!(
+        log_info!(
             "Get Address Info failed: {}",
             IpmiError::CompletionCode(rsp.ccode)
         );
     } else {
-        debug3!("Invalid response length {}", rsp.data.len());
+        log_info!("Invalid response length {}", rsp.data.len());
     }
 
     0
 }
 pub fn picmg_discover(intf: &mut dyn IpmiIntf) -> u8 {
-    debug2!(
+    log_debug!(
         "Running Get PICMG Properties my_addr 0x{:02x}, transit 0, target 0",
         intf.context().my_addr()
     );
@@ -120,7 +120,7 @@ pub fn picmg_discover(intf: &mut dyn IpmiIntf) -> u8 {
 
     // 检查响应状态码
     if rsp.ccode != 0 {
-        debug2!(
+        log_debug!(
             "Error response 0x{:02x} from Get PICMG Properities",
             rsp.ccode
         );
@@ -163,7 +163,7 @@ pub fn picmg_discover(intf: &mut dyn IpmiIntf) -> u8 {
     }
 
     //记录调试信息
-    debug3!(
+    log_debug!(
         "Discovered PICMG Extension Version {}.{}",
         major_version,
         rsp.data[1] >> 4
