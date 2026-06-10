@@ -20,7 +20,7 @@ use crate::commands::sdr::types::{get_sdr_record_type_name, SdrRepositoryInfo};
 use crate::error::IpmiResult;
 use crate::ipmi::context::OutputContext;
 use crate::ipmi::ipmi::IpmiRq;
-use crate::{debug2, debug3};
+use crate::{debug2, log_info};
 use clap::Subcommand;
 use std::error::Error;
 
@@ -70,10 +70,9 @@ pub fn ipmi_sdr_main(
             // 使用builder模式设置标准格式
             intf.context().output = OutputContext::default()
                 .with_extended(false)
-                            .with_from_sdr_list(true)
+                .with_from_sdr_list(true)
                 // sdr list 使用简洁模式，只输出 name/value/status 三列
                 .with_simple_sdr_list(true);
-            
             let type_filter = match record_type {
                 None => 0xfe,                     // Default: all except OEM
                 Some(SdrRecordType::All) => 0xff, // All records including OEM
@@ -102,10 +101,9 @@ pub fn ipmi_sdr_main(
             // 使用builder模式设置扩展格式
             intf.context().output = OutputContext::default()
                 .with_extended(true)
-                            .with_from_sdr_list(true)
+                .with_from_sdr_list(true)
                 // elist 仍然保留详细模式，不启用 simple_sdr_list
                 .with_simple_sdr_list(false);
-            
             let type_filter = match record_type {
                 None => 0xfe,                     // Default: all except OEM
                 Some(SdrRecordType::All) => 0xff, // All records including OEM
@@ -135,7 +133,7 @@ pub fn ipmi_sdr_main(
 
 /// Display SDR repository information (matching C ipmi_sdr_print_info)
 pub fn ipmi_sdr_info(mut intf: Box<dyn crate::ipmi::intf::IpmiIntf>) -> Result<(), Box<dyn Error>> {
-    debug3!("Starting SDR repository info query");
+    log_info!("Starting SDR repository info query");
 
     // Get SDR repository info using the same logic as C version
     let repo_info = get_sdr_repository_info(&mut intf)?;
@@ -161,14 +159,14 @@ fn get_sdr_repository_info(
         .ok_or(crate::error::IpmiError::ResponseError)?;
 
     if rsp.ccode != 0 {
-        debug3!(
+        log_info!(
             "Get SDR Repository Info failed with completion code: 0x{:02x}",
             rsp.ccode
         );
         return Err(crate::error::IpmiError::CompletionCode(rsp.ccode));
     }
 
-    debug3!("Got SDR Repository Info response: {} bytes", rsp.data_len);
+    log_info!("Got SDR Repository Info response: {} bytes", rsp.data_len);
 
     SdrRepositoryInfo::from_response_data(&rsp.data[..rsp.data_len as usize])
 }
