@@ -1238,6 +1238,7 @@ pub fn ipmi_get_event_desc(intf: &mut dyn IpmiIntf, rec: &SelEventRecord) -> Opt
     None
 }
 
+#[allow(clippy::borrow_deref_ref, clippy::never_loop)]
 pub fn ipmi_get_next_event_sensor_type(
     evt: &'static IpmiEventSensorType,
 ) -> Option<&'static IpmiEventSensorType> {
