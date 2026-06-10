@@ -6,10 +6,9 @@
 
 use std::ffi::CString;
 use std::io::{self, Write};
-use std::ptr;
 use std::sync::Mutex;
-use libc::{closelog, openlog, strerror, syslog, LOG_CONS, LOG_LOCAL4, LOG_NOTICE, LOG_WARNING, LOG_ERR};
-use std::os::raw::c_char;
+
+use utipmi_sys::syslog as sys;
 
 const LOG_NAME_DEFAULT: &str = "ipmitool";
 const LOG_MSG_LENGTH: usize = 1024;
@@ -45,9 +44,7 @@ pub fn lprintf(level: i32, format: &str, args: std::fmt::Arguments) {
         logmsg.push_str(&format!("{}", args));
 
         if logpriv.daemon {
-            unsafe {
-                syslog(level, "%s\0".as_ptr() as *const c_char, logmsg.as_ptr() as *const c_char);
-            }
+            sys::syslog_msg(level, &logmsg);
         } else {
             eprintln!("{}", logmsg);
         }
@@ -69,19 +66,13 @@ pub fn lperror(level: i32, format: &str, args: std::fmt::Arguments) {
         let mut logmsg = String::with_capacity(LOG_MSG_LENGTH);
         logmsg.push_str(&format!("{}", args));
 
-        let err_msg = unsafe { CString::from_raw(strerror(io::Error::last_os_error().raw_os_error().unwrap())) };
+        let errno = io::Error::last_os_error().raw_os_error().unwrap_or(0);
+        let err_msg = sys::strerror(errno);
 
         if logpriv.daemon {
-            unsafe {
-                syslog(
-                    level,
-                    "%s: %s\0".as_ptr() as *const c_char,
-                    logmsg.as_ptr() as *const c_char,
-                    err_msg.as_ptr(),
-                );
-            }
+            sys::syslog_msg2(level, &logmsg, &err_msg);
         } else {
-            eprintln!("{}: {}", logmsg, err_msg.to_string_lossy());
+            eprintln!("{}: {}", logmsg, err_msg);
         }
     }
 }
@@ -98,13 +89,11 @@ pub fn log_init(name: Option<&str>, isdaemon: bool, verbose: i32) {
     *log_priv = Some(LogPriv {
         name: log_name.clone(),
         daemon: isdaemon,
-        level: verbose + LOG_NOTICE,
+        level: verbose + sys::LOG_NOTICE,
     });
 
     if isdaemon {
-        unsafe {
-            openlog(log_name.as_ptr(), LOG_CONS, LOG_LOCAL4);
-        }
+        sys::openlog(&log_name, sys::LOG_CONS, sys::LOG_LOCAL4);
     }
 }
 
@@ -113,9 +102,7 @@ pub fn log_halt() {
 
     if let Some(logpriv) = log_priv.take() {
         if logpriv.daemon {
-            unsafe {
-                closelog();
-            }
+            sys::closelog();
         }
     }
 }
@@ -124,6 +111,6 @@ pub fn log_level_set(verbose: i32) {
     let mut log_priv = LOG_PRIV.lock().unwrap();
 
     if let Some(ref mut logpriv) = *log_priv {
-        logpriv.level = verbose + LOG_NOTICE;
+        logpriv.level = verbose + sys::LOG_NOTICE;
     }
 }
