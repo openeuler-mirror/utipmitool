@@ -6,17 +6,18 @@
 
 #![allow(dead_code)]
 
-use crate::debug3; // 添加debug3宏导入
 use crate::debug5;
 use crate::error::IpmiError;
 use crate::helper::*;
 use crate::ipmi::intf::*;
-use crate::ipmi::ipmi::*; // 添加debug5宏导入
+use crate::ipmi::ipmi::*;
+use crate::log_info; // 添加log_info!宏导入 // 添加debug5宏导入
 
 use crate::commands::sdr::iter::SdrIterator;
 use crate::commands::sdr::sdradd::*;
 use crate::commands::sdr::*;
 use crate::commands::sensor::sensor::*;
+use crate::log_debug;
 
 static mut USE_BUILT_IN: bool = false; /* Uses DeviceSDRs instead of SDRR */
 static mut SDR_MAX_READ_LEN: i32 = 0;
@@ -283,7 +284,7 @@ fn sdr_copy_to_sdrr(
     // Set target address for reading
     intf.context().set_target_addr(from_addr);
 
-    debug3!("Load SDRs from 0x{:x}", from_addr);
+    log_info!("Load SDRs from 0x{:x}", from_addr);
 
     // Create SDR iterator
     //let intf_box: Box<dyn IpmiIntf> = Box::new(intf);
@@ -397,8 +398,7 @@ pub fn ipmi_sdr_get_reservation(intf: &mut dyn IpmiIntf, use_builtin: bool) -> O
     }
 
     let reserve_id = u16::from_le_bytes([rsp.data[0], rsp.data[1]]);
-    //log::debug!("SDR reservation ID {:04x}", reserve_id);
-    debug3!("SDR reservation ID {:04x}", reserve_id);
+    log_debug!("SDR reservation ID {:04x}", reserve_id);
     Some(reserve_id)
 }
 
@@ -1001,14 +1001,14 @@ pub fn ipmi_sdr_get_sensor_reading_ipmb(
         bridged_request = true;
         save_addr = intf.context().target_addr();
         save_channel = intf.context().target_channel();
-        debug3!(
-            "Bridge to Sensor Intf my/{:#x} tgt/{:#x}:{:#x} Sdr tgt/{:#x}:{:#x}",
-            intf.context().my_addr(),
-            save_addr,
-            save_channel,
-            target,
-            channel
-        );
+        // log_debug!(
+        //     "Bridge to Sensor Intf my/{:#x} tgt/{:#x}:{:#x} Sdr tgt/{:#x}:{:#x}",
+        //     intf.context().my_addr(),
+        //     save_addr,
+        //     save_channel,
+        //     target,
+        //     channel
+        // );
         // bridged_request = true;
         // save_addr = intf.context().target_addr();
         // save_channel = intf.context().target_channel();
@@ -1038,6 +1038,7 @@ pub fn ipmi_sdr_get_sensor_reading_ipmb(
 }
 
 //读取到SensorReading
+#[allow(unused_mut)]
 pub fn ipmi_sdr_read_sensor_value(
     //intf: Box<dyn IpmiIntf>,
     intf: &mut dyn IpmiIntf, // 更通用的方式
