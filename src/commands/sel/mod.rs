@@ -112,10 +112,6 @@ fn parse_sel_list_args(
 fn parse_count_arg(count_str: &str) -> Result<usize, Box<dyn std::error::Error>> {
     // 首先尝试解析为 i32 来处理负数
     match count_str.parse::<i32>() {
-        Ok(n) if n < 0 => {
-            // 负数转换为正数，调用方会处理 last 逻辑
-            Ok((-n) as usize)
-        }
         Ok(n) => Ok(n as usize),
         Err(_) => {
             // 提供与 ipmitool 一致的错误信息
