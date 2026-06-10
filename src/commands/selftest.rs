@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-use crate::error::{val2str, COMPLETION_CODE_VALS};
+use crate::error::completion_code_to_string;
 use crate::ipmi::intf::IpmiIntf;
 use crate::ipmi::ipmi::{IpmiRq, IPMI_NETFN_APP};
 
@@ -18,7 +18,7 @@ pub fn ipmi_chassis_selftest(intf: &mut dyn IpmiIntf) -> Result<(), String> {
             if rsp.ccode != 0 {
                 return Err(format!(
                     "Error sending Get Self Test command: {}",
-                    val2str(rsp.ccode, &COMPLETION_CODE_VALS)
+                    completion_code_to_string(rsp.ccode)
                 ));
             }
 
