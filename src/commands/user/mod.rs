@@ -9,10 +9,10 @@ use std::error::Error;
 
 use crate::debug1;
 use crate::error::IpmiError;
+use crate::error::IpmiResult;
 use crate::ipmi::constants::*;
 use crate::ipmi::intf::IpmiIntf;
 use crate::ipmi::ipmi::{IpmiRq, IPMI_NETFN_APP};
-
 /// 解析权限级别，支持十进制和十六进制输入
 fn parse_privilege_level(s: &str) -> Result<u8, String> {
     let privilege = if s.starts_with("0x") || s.starts_with("0X") {
@@ -350,8 +350,10 @@ pub struct UserName {
 impl UserName {
     /// 获取用户名的字符串表示
     pub fn name_as_string(&self) -> String {
-        let end = self.user_name.iter().position(|&x| x == 0).unwrap_or(16);
-        String::from_utf8_lossy(&self.user_name[..end]).to_string()
+        let name_str =
+            String::from_utf8_lossy(self.user_name.split(|&c| c == 0).next().unwrap_or(&[]))
+                .to_string();
+        name_str
     }
 }
 
@@ -488,8 +490,7 @@ fn ipmi_get_user_access(
     user_access_rsp: &mut UserAccess,
 ) -> Result<(), Box<dyn Error>> {
     let mut req = IpmiRq::default();
-    let mut data = [0u8; 2];
-
+    let mut data: [u8; 2] = [0u8; 2];
     data[0] = user_access_rsp.channel & 0x0F;
     data[1] = ipmi_uid(user_access_rsp.user_id);
 
@@ -617,8 +618,7 @@ pub fn ipmi_set_user_name(
         Some(rsp) => {
             if rsp.ccode != 0 {
                 // 使用友好的错误信息，与ipmitool保持一致
-                let error_desc =
-                    crate::error::val2str(rsp.ccode, &crate::error::COMPLETION_CODE_VALS);
+                let error_desc = crate::error::completion_code_to_string(rsp.ccode);
                 // 如果错误描述是"Unknown value"，显示格式为"Unknown (0xXX)"
                 let formatted_error = if error_desc == "Unknown value" {
                     format!("Unknown (0x{:02x})", rsp.ccode)
@@ -653,21 +653,17 @@ fn _ipmi_set_user_password(
     operation: u8,
     password: Option<&str>,
     is_twenty_byte: bool,
-) -> Result<(), Box<dyn Error>> {
+) -> IpmiResult<()> {
     // 验证用户ID范围
     if !(IPMI_UID_MIN..=IPMI_UID_MAX).contains(&user_id) {
-        return Err(format!(
-            "Invalid user ID: {}. Must be between {} and {}",
-            user_id, IPMI_UID_MIN, IPMI_UID_MAX
-        )
-        .into());
+        return Err(IpmiError::System("Invalid user ID".to_string()));
     }
 
-    debug1!(
-        "User password operation: user={}, operation=0x{:02x}",
-        user_id,
-        operation
-    );
+    // debug1!(
+    //     "User password operation: user={}, operation=0x{:02x}",
+    //     user_id,
+    //     operation
+    // );
 
     // 参考ipmitool的_ipmi_set_user_password实现
     let mut req = IpmiRq::default();
@@ -697,11 +693,11 @@ fn _ipmi_set_user_password(
     // 发送请求 - 返回错误码而不是抛出异常，与ipmitool一致
     let rsp = match intf.sendrecv(&req) {
         Some(rsp) => rsp,
-        None => return Err("IPMI response is NULL".into()),
+        None => return Err(IpmiError::Value(-1)),
     };
 
     if rsp.ccode != 0 {
-        return Err(IpmiError::CompletionCode(rsp.ccode).into());
+        return Err(IpmiError::CompletionCode(rsp.ccode));
     }
 
     Ok(())
@@ -761,10 +757,8 @@ pub fn ipmi_set_user_password(
         }
         Err(e) => {
             // 与ipmitool一致的错误输出格式 - 避免重复输出
-            if let Some(crate::error::IpmiError::CompletionCode(ccode)) =
-                e.downcast_ref::<crate::error::IpmiError>()
-            {
-                let error_desc = crate::error::val2str(*ccode, &crate::error::COMPLETION_CODE_VALS);
+            if let crate::error::IpmiError::CompletionCode(ccode) = e {
+                let error_desc = crate::error::completion_code_to_string(ccode);
                 // 如果错误描述是"Unknown value"，显示格式为"Unknown (0xXX)"
                 let formatted_error = if error_desc == "Unknown value" {
                     format!("Unknown (0x{:02x})", ccode)
@@ -793,10 +787,8 @@ pub fn ipmi_user_disable(intf: &mut dyn IpmiIntf, user_id: u8) -> Result<(), Box
         }
         Err(e) => {
             // 与ipmitool一致的错误输出格式 - 避免重复输出
-            if let Some(crate::error::IpmiError::CompletionCode(ccode)) =
-                e.downcast_ref::<crate::error::IpmiError>()
-            {
-                let error_desc = crate::error::val2str(*ccode, &crate::error::COMPLETION_CODE_VALS);
+            if let crate::error::IpmiError::CompletionCode(ccode) = e {
+                let error_desc = crate::error::completion_code_to_string(ccode);
                 // 如果错误描述是"Unknown value"，显示格式为"Unknown (0xXX)"
                 let formatted_error = if error_desc == "Unknown value" {
                     format!("Unknown (0x{:02x})", ccode)
@@ -825,10 +817,8 @@ pub fn ipmi_user_enable(intf: &mut dyn IpmiIntf, user_id: u8) -> Result<(), Box<
         }
         Err(e) => {
             // 与ipmitool一致的错误输出格式 - 避免重复输出
-            if let Some(crate::error::IpmiError::CompletionCode(ccode)) =
-                e.downcast_ref::<crate::error::IpmiError>()
-            {
-                let error_desc = crate::error::val2str(*ccode, &crate::error::COMPLETION_CODE_VALS);
+            if let crate::error::IpmiError::CompletionCode(ccode) = e {
+                let error_desc = crate::error::completion_code_to_string(ccode);
                 // 如果错误描述是"Unknown value"，显示格式为"Unknown (0xXX)"
                 let formatted_error = if error_desc == "Unknown value" {
                     format!("Unknown (0x{:02x})", ccode)
@@ -895,8 +885,7 @@ pub fn ipmi_user_set_privilege(
         Some(rsp) => {
             if rsp.ccode != 0 {
                 // 与ipmitool一致的两行错误输出格式
-                let error_desc =
-                    crate::error::val2str(rsp.ccode, &crate::error::COMPLETION_CODE_VALS);
+                let error_desc = crate::error::completion_code_to_string(rsp.ccode);
                 // 如果错误描述是"Unknown value"，显示格式为"Unknown (0xXX)"
                 let formatted_error = if error_desc == "Unknown value" {
                     format!("Unknown (0x{:02x})", rsp.ccode)
@@ -929,7 +918,7 @@ pub fn ipmi_user_test_password(
     password: Option<&str>,
     is_twenty_byte: bool,
 ) -> Result<(), Box<dyn Error>> {
-    debug1!("Testing password for user {}", user_id);
+    // debug1!("Testing password for user {}", user_id);
 
     // 获取密码 - 支持交互式输入，与ipmitool保持一致
     let password = match password {
@@ -956,31 +945,20 @@ pub fn ipmi_user_test_password(
             println!("Success");
             Ok(())
         }
-        Err(e) => {
-            if let Some(ipmi_error) = e.downcast_ref::<IpmiError>() {
-                match ipmi_error {
-                    IpmiError::CompletionCode(0x80) => {
-                        println!("Failure: password incorrect");
-                        std::process::exit(1);
-                    }
-                    IpmiError::CompletionCode(0x81) => {
-                        println!("Failure: wrong password size");
-                        std::process::exit(1);
-                    }
-                    IpmiError::CompletionCode(_code) => {
-                        println!("Unknown error");
-                        std::process::exit(1);
-                    }
-                    _ => {
-                        println!("Unknown error");
-                        std::process::exit(1);
-                    }
-                }
-            } else {
+        Err(e) => match e {
+            IpmiError::CompletionCode(0x80) => {
+                println!("Failure: password incorrect");
+                std::process::exit(1);
+            }
+            IpmiError::CompletionCode(0x81) => {
+                println!("Failure: wrong password size");
+                std::process::exit(1);
+            }
+            _ => {
                 println!("Unknown error");
                 std::process::exit(1);
             }
-        }
+        },
     }
 }
 
@@ -1164,7 +1142,7 @@ mod tests {
     #[test]
     fn test_completion_code_error_formatting() {
         // 测试IPMI completion code的错误信息格式化
-        use crate::error::{val2str, COMPLETION_CODE_VALS};
+        use crate::error::completion_code_to_string;
 
         // 测试常见的错误码
         let test_cases = [
@@ -1175,7 +1153,7 @@ mod tests {
         ];
 
         for (code, expected_desc) in &test_cases {
-            let actual_desc = val2str(*code, &COMPLETION_CODE_VALS);
+            let actual_desc = completion_code_to_string(*code);
             assert_eq!(
                 actual_desc, *expected_desc,
                 "Error description for code 0x{:02x} should match",
@@ -1185,19 +1163,19 @@ mod tests {
 
         // 测试未知错误码
         let unknown_code = 0xEE;
-        let unknown_desc = val2str(unknown_code, &COMPLETION_CODE_VALS);
+        let unknown_desc = completion_code_to_string(unknown_code);
         assert_eq!(unknown_desc, "Unknown value");
     }
 
     #[test]
     fn test_error_message_format() {
         // 测试错误消息格式
-        use crate::error::{val2str, COMPLETION_CODE_VALS};
+        use crate::error::completion_code_to_string;
 
         let user_id = 2;
         let username = "testuser";
         let code = 0xcc;
-        let error_desc = val2str(code, &COMPLETION_CODE_VALS);
+        let error_desc = completion_code_to_string(code);
 
         let formatted_error = format!(
             "Set User Name command failed (user {}, name {}): {}",
