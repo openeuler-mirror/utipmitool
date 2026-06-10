@@ -9,25 +9,23 @@ use crate::ipmi::intf::{IpmiContext, IpmiIntf};
 use crate::ipmi::ipmi::*;
 // 在文件顶部的引用部分添加
 use crate::debug_control;
-
+use crate::log_debug;
+use crate::VERBOSE_LEVEL;
 //add typedef
 #[allow(non_camel_case_types)]
 pub type IPMI_OEM = u32;
 use std::sync::atomic::AtomicBool;
 
 use nix::errno::Errno;
-use nix::fcntl::{open, OFlag};
 use nix::sys::select::{select, FdSet};
-use nix::sys::stat::Mode;
-use nix::{ioctl_read, ioctl_readwrite};
+use std::os::fd::{AsFd, AsRawFd};
 
 //extern crate ipmi_macros;
 use ipmi_macros::{DataAccess, MemberOffsets};
 
 use crate::debug1;
-use crate::debug2;
-use crate::debug3;
 use crate::debug5;
+use crate::log_info;
 // Constants
 pub const IPMI_MAX_ADDR_SIZE: usize = 0x20;
 pub const IPMI_BMC_CHANNEL: u8 = 0xf;
@@ -46,6 +44,8 @@ static CURR_SEQ: AtomicI32 = AtomicI32::new(0);
 fn next_seq() -> i32 {
     CURR_SEQ.fetch_add(1, Ordering::SeqCst)
 }
+
+use utipmi_sys::openipmi_ioctl;
 
 #[derive(Default)]
 #[repr(C)]
@@ -152,34 +152,6 @@ pub const IPMICTL_GET_MY_ADDRESS_CMD: u8 = 18;
 pub const IPMICTL_SET_MY_LUN_CMD: u8 = 19;
 pub const IPMICTL_GET_MY_LUN_CMD: u8 = 20;
 
-ioctl_readwrite!(
-    ipmi_ioctl_receive_msg_trunc,
-    IPMI_IOC_MAGIC,
-    IPMICTL_RECEIVE_MSG_TRUNC,
-    IpmiRecv
-);
-
-ioctl_read!(
-    ipmi_ioctl_send_command,
-    IPMI_IOC_MAGIC,
-    IPMICTL_SEND_COMMAND,
-    IpmiReq
-);
-
-ioctl_read!(
-    ipmi_ioctl_set_get_events_cmd,
-    IPMI_IOC_MAGIC,
-    IPMICTL_SET_GETS_EVENTS_CMD,
-    i32
-);
-
-ioctl_read!(
-    ipmi_ioctl_set_my_address_cmd,
-    IPMI_IOC_MAGIC,
-    IPMICTL_SET_MY_ADDRESS_CMD,
-    u32
-);
-
 // Constants
 pub const IPMI_OPENIPMI_MAX_RQ_DATA_SIZE: u16 = 38;
 pub const IPMI_OPENIPMI_MAX_RS_DATA_SIZE: u16 = 35;
@@ -190,7 +162,7 @@ pub struct OpenIntf {
     pub name: String, // &'a str,
     pub desc: String, //&'a str,
     pub devfile: Option<String>,
-    pub fd: i32,
+    pub fd: Option<std::fs::File>,
     pub opened: i32,
     pub abort: i32,
     pub noanswer: i32,
@@ -223,78 +195,6 @@ pub struct OpenIntf {
 //如果函数需要访问接口所代表结构体数据，那么函数应该以方法的形式实现。
 impl OpenIntf {
     // 添加新函数处理调试信息
-    fn print_debug_info(&self) {
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        // 确保调试信息只输出一次的静态变量
-        static DEBUG_INFO_PRINTED: AtomicBool = AtomicBool::new(false);
-
-        // 如果已经输出过，则直接返回
-        if DEBUG_INFO_PRINTED.swap(true, Ordering::SeqCst) {
-            return;
-        }
-
-        let verbose_level = crate::VERBOSE_LEVEL.load(Ordering::Relaxed);
-
-        // -v 模式输出
-        if verbose_level == 1 {
-            //println!("Running Get VSO Capabilities my_addr 0x20, transit 0, target 0");
-            //println!("Invalid completion code received: Invalid command");
-            //println!("Discovered IPMB address 0x0");
-        }
-        // -vv 及以上模式输出
-        else if verbose_level == 2 {
-            println!("Using ipmi device 0");
-            println!("Set IPMB address to 0x20");
-            println!("Iana: {}", self.manufacturer_id); // 添加缺失的Iana输出
-            println!("Running Get PICMG Properties my_addr 0x20, transit 0, target 0");
-            println!("Error response 0xc1 from Get PICMG Properities");
-            println!("Running Get VSO Capabilities my_addr 0x20, transit 0, target 0");
-            println!("Invalid completion code received: Invalid command");
-            println!("Acquire IPMB address");
-            println!("Discovered IPMB address 0x0");
-            // 修正target地址格式为0x20:0，与原生ipmitool一致
-            println!("Interface address: my_addr 0x20 transit 0:0 target 0x20:0 ipmb_target 0");
-
-            // 添加空行，与原生ipmitool一致
-            println!();
-        } else if verbose_level >= 3 {
-            // 基本信息同 -vv
-            println!("Using ipmi device 0");
-            println!("Set IPMB address to 0x20");
-
-            // 第一个请求的详细信息
-            println!("OpenIPMI Request Message Header:");
-            println!("  netfn     = 0x6");
-            println!("  cmd       = 0x1");
-
-            println!("Iana: {}", self.manufacturer_id);
-            println!("Running Get PICMG Properties my_addr 0x20, transit 0, target 0");
-
-            // PICMG 请求的详细信息
-            println!("OpenIPMI Request Message Header:");
-            println!("  netfn     = 0x2c");
-            println!("  cmd       = 0x0");
-            println!("OpenIPMI Request Message Data (1 bytes)");
-            println!(" 00");
-
-            println!("Error response 0xc1 from Get PICMG Properities");
-            println!("Running Get VSO Capabilities my_addr 0x20, transit 0, target 0");
-
-            // VSO 请求的详细信息
-            println!("OpenIPMI Request Message Header:");
-            println!("  netfn     = 0x2c");
-            println!("  cmd       = 0x0");
-            println!("OpenIPMI Request Message Data (1 bytes)");
-            println!(" 03");
-
-            println!("Invalid completion code received: Invalid command");
-            println!("Acquire IPMB address");
-            println!("Discovered IPMB address 0x0");
-            println!("Interface address: my_addr 0x20 transit 0:0 target 0x20:0 ipmb_target 0");
-            println!();
-        }
-    }
 
     pub fn new(devnum: u8, ctx: IpmiContext) -> Self {
         Self {
@@ -329,8 +229,7 @@ impl IpmiIntf for OpenIntf {
         // 隐藏"Loading interface: Open"消息
         debug_control::hide_loading_interface_message();
 
-        //
-        self.fd = -1;
+        self.fd = None;
 
         // 设置设备文件路径
         let dev_paths = [
@@ -340,12 +239,16 @@ impl IpmiIntf for OpenIntf {
         ];
 
         // 显示设备号
-        debug2!("Using ipmi device {}", self.devnum);
+        log_debug!("Using ipmi device {}", self.devnum);
         // 尝试打开设备文件
         for path in &dev_paths {
-            match open(path.as_str(), OFlag::O_RDWR, Mode::empty()) {
-                Ok(fd) => {
-                    self.fd = fd; // 保存文件描述符
+            match std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(path)
+            {
+                Ok(file) => {
+                    self.fd = Some(file);
                     break;
                 }
                 Err(_) => continue,
@@ -353,8 +256,7 @@ impl IpmiIntf for OpenIntf {
         }
 
         // 验证文件描述符是否有效
-        // 如果所有打开尝试都失败，fd 仍为 -1
-        if self.fd < 0 {
+        if self.fd.is_none() {
             // 生成与 ipmitool 一致的错误消息
             return Err(IpmiError::System(
             format!("Could not open device at /dev/ipmi{} or /dev/ipmi/{} or /dev/ipmidev/{}: No such file or directory",
@@ -362,9 +264,11 @@ impl IpmiIntf for OpenIntf {
         ));
         }
 
+        let fd = self.fd.as_ref().unwrap().as_raw_fd();
+
         // 设置事件接收
         let mut receive_events = 1;
-        if unsafe { ipmi_ioctl_set_get_events_cmd(self.fd, &mut receive_events) }.is_err() {
+        if openipmi_ioctl::set_get_events_cmd(fd, &mut receive_events).is_err() {
             return Err(IpmiError::System(
                 "Could not enable event receiver".to_string(),
             ));
@@ -382,6 +286,7 @@ impl IpmiIntf for OpenIntf {
                     e
                 )));
             }
+            log_debug!("Set IPMB address to 0x{:x}", my_addr);
         }
 
         // 完成所有初始化后，获取 IANA 值
@@ -392,10 +297,7 @@ impl IpmiIntf for OpenIntf {
     }
 
     fn close(&mut self) {
-        if self.fd != -1 {
-            unsafe { nix::libc::close(self.fd) };
-            self.fd = -1;
-        }
+        let _ = self.fd.take();
         self.opened = 0;
 
         // 重置调试状态
@@ -459,17 +361,19 @@ impl IpmiIntf for OpenIntf {
             return None;
         }
 
-        // 添加详细日志支持
-        //VERBOSE_LEVEL>2
-        debug3!("OpenIPMI Request Message Header:");
-        debug3!("  netfn     = 0x{:x}", req.msg.netfn());
-        debug3!("  cmd       = 0x{:x}", req.msg.cmd);
-        // 需要实现printbuf类似功能...
-        if let Some(data) = req.msg.data() {
-            let buf = hexbuf(data, "OpenIPMI Request Message Data");
-            debug3!("{}", buf);
-        }
+        let fd = self.fd.as_ref()?.as_raw_fd();
 
+        // 添加详细日志支持
+        if VERBOSE_LEVEL.load(Ordering::Relaxed) > 2 {
+            log_info!("OpenIPMI Request Message Header:");
+            log_info!("  netfn     = 0x{:x}", req.msg.netfn());
+            log_info!("  cmd       = 0x{:x}", req.msg.cmd);
+            // 需要实现printbuf类似功能...
+            if let Some(data) = req.msg.data() {
+                let buf = hexbuf(data, "OpenIPMI Request Message Data");
+                log_info!("{}", buf);
+            }
+        }
         /*
          * setup and send message
          */
@@ -547,7 +451,7 @@ impl IpmiIntf for OpenIntf {
         //println!("*mut u8 size: {}", std::mem::size_of::<*mut u8>());
         //IpmiMsg::print_offsets();
         //IpmiReq::print_offsets();
-        if let Err(e) = unsafe { ipmi_ioctl_send_command(self.fd, &mut _req) } {
+        if let Err(e) = openipmi_ioctl::send_command(fd, &mut _req) {
             log::error!("Unable to send command: {}", e);
             return None;
         }
@@ -563,12 +467,12 @@ impl IpmiIntf for OpenIntf {
             0,                                 // 微秒
         );
 
-        let borrowfd = unsafe { std::os::fd::BorrowedFd::borrow_raw(self.fd) };
+        let borrowfd = self.fd.as_ref()?.as_fd();
         let mut fd_set = FdSet::new();
         fd_set.insert(borrowfd);
 
         loop {
-            let res = match select(self.fd + 1, &mut fd_set, None, None, Some(&mut timeval)) {
+            let res = match select(fd + 1, &mut fd_set, None, None, Some(&mut timeval)) {
                 Ok(n) => n,
                 Err(Errno::EINTR) => continue, // EINTR 处理
                 Err(e) => {
@@ -596,7 +500,7 @@ impl IpmiIntf for OpenIntf {
                     recv.msg.data_len = rsp.data.len() as u16;
 
                     // 读取到recv
-                    if let Err(e) = unsafe { ipmi_ioctl_receive_msg_trunc(self.fd, &mut recv) } {
+                    if let Err(e) = openipmi_ioctl::receive_msg_trunc(fd, &mut recv) {
                         if e != Errno::EMSGSIZE {
                             eprintln!("Unable to receive msg:{}", e);
                             return None;
@@ -711,10 +615,16 @@ impl IpmiIntf for OpenIntf {
 
     fn set_my_addr(&mut self, addr: u8) -> IpmiResult<()> {
         let mut a = addr as u32;
-        match unsafe { ipmi_ioctl_set_my_address_cmd(self.fd, &mut a as *mut u32) } {
+        let fd = self
+            .fd
+            .as_ref()
+            .map(|f| f.as_raw_fd())
+            .ok_or_else(|| IpmiError::System("Interface not opened".to_string()))?;
+
+        match openipmi_ioctl::set_my_address_cmd(fd, &mut a) {
             Ok(_) => {
                 self.context.set_my_addr(a);
-                debug2!("Set IPMB address to 0x{:x}", a);
+                // log_debug!("Set IPMB address to 0x{:x}", a);
                 Ok(())
             }
             Err(e) => Err(IpmiError::System(format!(
@@ -771,8 +681,8 @@ pub fn ipmi_csum(data: &[u8]) -> u8 {
 
 //add function
 pub fn ipmi_get_oem(intf: &mut OpenIntf) -> IPMI_OEM {
-    if intf.fd <= 0 {
-        println!("❌ 文件描述符无效: {}", intf.fd);
+    if intf.fd.as_ref().map(|f| f.as_raw_fd()).is_none() {
+        println!("❌ 文件描述符无效");
         return 0;
     }
 
