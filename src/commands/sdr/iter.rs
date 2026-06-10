@@ -8,11 +8,11 @@
 
 use crate::commands::mc::{IpmDevidRsp, BMC_GET_DEVICE_ID};
 use crate::commands::sdr::sdr::*;
-use crate::debug3;
 use crate::debug4;
 use crate::debug5;
-
 use crate::ipmi::ipmi::*;
+use crate::log_info;
+use crate::{log_debug, log_error};
 
 //use crate::commands::sdr::sdradd::IpmiSdrInterface;
 use crate::error::IpmiError;
@@ -99,6 +99,7 @@ impl<'a> SdrIterator<'a> {
                 }
             } else {
                 // 使用SDR仓库（静默）
+                log_debug!("Using SDR from Repository");
             }
         }
         iter.use_builtin = use_builtin;
@@ -140,17 +141,16 @@ impl<'a> SdrIterator<'a> {
 
             iter.total = sdr_info.count as i32;
             iter.next_id = 0;
-            debug3!("SDR free space: {}", sdr_info.free);
-            debug3!("SDR records   : {}", sdr_info.count);
+            log_debug!("SDR free space: {}", sdr_info.free);
+            log_debug!("SDR records   : {}", sdr_info.count);
 
             //Rebuild repository if empty
             if sdr_info.count == 0 {
-                debug3!("Rebuilding SDRR...");
+                log_debug!("Rebuilding SDRR...");
                 // 仓库重建（静默模式）
                 //将借用解引
                 if !ipmi_sdr_add_from_sensors(iter.intf, 0) {
-                    debug3!("Could not build SDRR!");
-                    log::error!("Could not build SDRR!");
+                    log_error!("Could not build SDRR!");
                     return None;
                 }
             }
@@ -173,7 +173,7 @@ impl<'a> SdrIterator<'a> {
 
             iter.total = sdr_info.count as i32;
             iter.next_id = 0;
-            debug3!("SDR records   :{}", sdr_info.count);
+            log_info!("SDR records   :{}", sdr_info.count);
         };
 
         // 单独Get reservation ID
@@ -265,10 +265,10 @@ impl<'a> SdrIterator<'a> {
                                 //返回当前的请求id，方便继续使用这个id请求请求
                             }
 
-                            debug5!("SDR record ID   : 0x{:04x}", self.next_id);
-                            debug5!("SDR record type : 0x{:02x}", sdr_rs.header.record_type);
-                            debug5!("SDR record next : 0x{:04x}", sdr_rs.next);
-                            debug5!("SDR record bytes: {}", sdr_rs.header.length);
+                            log_debug!("SDR record ID   : 0x{:04x}", self.next_id);
+                            log_debug!("SDR record type : 0x{:02x}", sdr_rs.header.record_type);
+                            log_debug!("SDR record next : 0x{:04x}", sdr_rs.next);
+                            log_debug!("SDR record bytes: {}", sdr_rs.header.length);
                             //self.next_id = sdr_rs.header.id;//更新下个请求id
                             return Some(sdr_rs);
                         }
@@ -305,8 +305,6 @@ impl<'a> SdrIterator<'a> {
             offset: 0,
             length: 0, //临时赋值
         };
-
-        debug4!("Getting {} bytes from SDR at offset {}", len, 0);
 
         //let x = if condition { 5 } else { "hello" };
         let mut req = IpmiRq {
@@ -356,7 +354,7 @@ impl<'a> SdrIterator<'a> {
 
             sdr_rq.offset = i + 5; // skip 5 header bytes，只区数据部分
 
-            debug5!(
+            log_debug!(
                 "Getting {} bytes from SDR at offset {}",
                 sdr_rq.length,
                 sdr_rq.offset
