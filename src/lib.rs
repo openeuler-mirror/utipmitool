@@ -10,6 +10,7 @@ pub mod error;
 pub mod helper;
 pub mod interface;
 pub mod ipmi;
+pub mod logger;
 pub mod logging;
 
 // 在 src/lib.rs 中添加或确认存在
