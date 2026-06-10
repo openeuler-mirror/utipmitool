@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-use crate::error::{val2str, COMPLETION_CODE_VALS};
+use crate::error::completion_code_to_string;
 use crate::ipmi::intf::IpmiIntf;
 use crate::ipmi::ipmi::{IpmiRq, IPMI_NETFN_CHASSIS};
 
@@ -50,7 +50,7 @@ pub fn ipmi_chassis_identify(intf: &mut dyn IpmiIntf, arg: Option<&str>) -> Resu
                 }
                 Err(format!(
                     "Set Chassis Identify failed: {}",
-                    val2str(rsp.ccode, &COMPLETION_CODE_VALS)
+                    completion_code_to_string(rsp.ccode)
                 ))
             } else {
                 print!("Chassis identify interval: ");
