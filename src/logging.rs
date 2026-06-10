@@ -54,7 +54,7 @@ impl LogColors {
 ///   - 0: 只显示 ERROR, WARN, INFO
 ///   - 1: + debug1 (-v)
 ///   - 2: + debug2 (-vv)
-///   - 3: + debug3 (-vvv)
+///   - 3: + log_info! (-vvv)
 ///   - 4: + debug4 (-vvvv)
 ///   - 5: + debug5 (-vvvvv)
 pub fn setup_logger(verbose: u8) {
@@ -97,7 +97,7 @@ pub fn setup_logger(verbose: u8) {
 
             // 根据target判断输出格式 - 匹配ipmitool风格
             match record.target() {
-                "debug1" | "debug2" | "debug3" | "debug4" | "debug5" => {
+                "debug1" | "debug2" | "log_info!" | "debug4" | "debug5" => {
                     // ipmitool风格：直接输出消息，无前缀
                     writeln!(buf, "{}", record.args())
                 }
@@ -130,7 +130,7 @@ pub fn is_debug_enabled(level: u8) -> bool {
     match level {
         1 => log::log_enabled!(target: "debug1", log::Level::Debug),
         2 => log::log_enabled!(target: "debug2", log::Level::Debug),
-        3 => log::log_enabled!(target: "debug3", log::Level::Debug),
+        3 => log::log_enabled!(target: "log_info!", log::Level::Debug),
         4 => log::log_enabled!(target: "debug4", log::Level::Debug),
         5 => log::log_enabled!(target: "debug5", log::Level::Trace),
         _ => false,
@@ -140,13 +140,13 @@ pub fn is_debug_enabled(level: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{debug1, debug2, debug3};
+    use crate::{debug1, debug2, log_info};
 
     #[test]
     fn test_setup_logger() {
         setup_logger(2);
         debug1!("This is debug1 message");
         debug2!("This is debug2 message");
-        debug3!("This should not appear");
+        log_info!("This should not appear");
     }
 }
