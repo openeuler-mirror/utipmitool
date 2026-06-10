@@ -15,7 +15,7 @@ use crate::error::IpmiError;
 use crate::ipmi::context::OutputContext;
 use crate::ipmi::intf::IpmiIntf;
 use crate::ipmi::ipmi::*;
-use crate::{debug2, debug3, debug5};
+use crate::{debug5, log_debug};
 use unpack::RAWDATA;
 
 use ipmi_macros::AsBytes;
@@ -107,91 +107,21 @@ pub fn ipmi_sensor_list(mut intf: Box<dyn IpmiIntf>) -> Result<(), Box<dyn Error
             intf.context().output = out;
         }
     }
-    // 在第一次传感器输出前按 -v 级别打印一次 IPMB 地址，与 ipmitool行为一致：仅在 sensor list 路径打印
-    {
-        let ctx = intf.context();
-        if !ctx.output_config().is_from_sdr_list()
-            && ctx.target_ipmb_addr() != 0
-            && ctx.verbose_level() >= 1
-        {
-            println!("Discovered IPMB address 0x{:02x}", ctx.target_ipmb_addr());
-        }
-    }
-    let extended = intf.context().output.extended;
-    debug3!("Querying SDR for sensor list, extended: {}", extended);
 
-    // -vv级别的调试信息：显示SDR查询开始（仅在 sdr list 路径打印，避免 sensor -vv 污染输出）
-    if intf.context().output_config().is_from_sdr_list() {
-        debug2!("Querying SDR for sensor list");
-    }
-
-    // 在创建迭代器之前获取所有需要的SDR信息，避免借用冲突
-    let sdr_info = get_sdr_repository_info(intf.as_mut());
-    let reservation_id = crate::commands::sdr::sdr::ipmi_sdr_get_reservation(intf.as_mut(), false);
-
-    // 显示SDR信息
-    if intf.context().output_config().is_from_sdr_list() {
-        match sdr_info {
-            Ok(info) => {
-                debug2!("SDR free space: {}", info.free_space);
-                debug2!("SDR records   : {}", info.record_count);
-            }
-            Err(_) => {
-                debug2!("SDR free space: unknown");
-                debug2!("SDR records   : unknown");
-            }
-        }
-    }
-
-    // 显示SDR预留ID
-    if intf.context().output_config().is_from_sdr_list() {
-        if let Some(res_id) = reservation_id {
-            debug2!("SDR reservation ID {:04x}", res_id);
-        }
-    }
-
-    // 在创建迭代器前缓存是否来自 sdr list 的标志，避免后续可变借用冲突
-    let from_sdr_list = intf.context().output_config().is_from_sdr_list();
+    log_debug!("Querying SDR for sensor list");
 
     let iter_opt = SdrIterator::new(intf.as_mut(), false);
 
     if let Some(mut iter) = iter_opt {
         // 跟踪当前记录ID
-        let mut current_record_id = 0u16;
+        // let mut current_record_id;
 
         while let Some(header) = iter.next() {
-            //next多次0x23获取header，用于读取record
-
-            // -vv级别的调试信息：显示每个SDR记录的处理过程（仅 sdr list 路径打印）
-            if from_sdr_list {
-                debug2!("SDR record ID   : 0x{:04x}", current_record_id);
-                debug2!("SDR record type : 0x{:02x}", header.record_type);
-                // 获取下一个记录ID（从迭代器的next_id字段）
-                debug2!("SDR record next : 0x{:04x}", iter.next_id);
-                debug2!("SDR record bytes: {}", header.length);
-            }
-
             let rec: Vec<u8> = match iter.ipmi_sdr_get_record(&header) {
-                Some(r) => {
-                    // -vv级别的调试信息：显示数据获取过程（仅 sdr list 路径打印）
-                    if from_sdr_list {
-                        debug2!("Getting 33 bytes from SDR at offset 5");
-                        // 对于大部分传感器记录，都会有这个额外的读取操作
-                        if header.record_type == SDR_RECORD_TYPE_FULL_SENSOR
-                            || header.record_type == SDR_RECORD_TYPE_COMPACT_SENSOR
-                        {
-                            debug2!("Getting 2 bytes from SDR at offset 38");
-                        }
-                    }
-                    r
-                }
+                Some(r) => r,
                 None => return Err(Box::new(IpmiError::ResponseError)),
             };
-            debug5!(
-                "read SdrRecord from header.id:{} ,record_type:{}",
-                header.id,
-                header.record_type
-            );
+
             // 处理传感器记录类型
             match header.record_type {
                 SDR_RECORD_TYPE_FULL_SENSOR | SDR_RECORD_TYPE_COMPACT_SENSOR => {
@@ -222,7 +152,7 @@ pub fn ipmi_sensor_list(mut intf: Box<dyn IpmiIntf>) -> Result<(), Box<dyn Error
             }
 
             // 更新当前记录ID
-            current_record_id = header.id;
+            // let mut current_record_id = header.id;
         }
     }
 
@@ -243,6 +173,7 @@ pub fn ipmi_sensor_list_from_sdr(mut intf: Box<dyn IpmiIntf>) -> Result<(), Box<
 }
 
 /// Get detailed sensor information by names (aligns with `ipmitool sensor get`)
+#[allow(clippy::ptr_arg)]
 pub fn ipmi_sensor_get(
     mut intf: Box<dyn IpmiIntf>,
     ids: &Vec<String>,
@@ -986,6 +917,15 @@ pub fn ipmi_sensor_print_eventonly(intf: &mut dyn IpmiIntf, sensor_raw: &[u8]) -
 // ================================
 
 /// Verbose模式下的阈值传感器输出（匹配ipmitool风格）
+#[allow(
+    unused_variables,
+    clippy::collapsible_else_if,
+    clippy::collapsible_if,
+    clippy::if_same_then_else,
+    clippy::manual_memcpy,
+    clippy::println_empty_string,
+    clippy::unnecessary_cast
+)]
 pub fn ipmi_sensor_print_fc_threshold_verbose(
     intf: &mut dyn IpmiIntf,
     sr: &SensorReading,
@@ -1077,7 +1017,7 @@ pub fn ipmi_sensor_print_fc_threshold_verbose(
         // 无效读数
         // 对齐原生 ipmitool：即使 Device Not Present，也不要提前 return；
         // 仍需继续打印 Event Status / (Assertions|Deassertions) Enabled 等块。
-    if !intf.context().output_config().is_from_sdr_list() {
+        if !intf.context().output_config().is_from_sdr_list() {
             // sensor -v 路径：保持行首和缩进一致
             println!(" Sensor Reading        :  Unable to read sensor: Device Not Present");
             println!("");
@@ -1845,6 +1785,11 @@ pub fn ipmi_sensor_print_fc_threshold_verbose(
 }
 
 /// Verbose模式下的离散传感器输出（匹配ipmitool风格）
+#[allow(
+    unused_assignments,
+    clippy::collapsible_else_if,
+    clippy::println_empty_string
+)]
 pub fn ipmi_sensor_print_fc_discrete_verbose(
     intf: &mut dyn IpmiIntf,
     sr: &SensorReading,
@@ -2985,7 +2930,7 @@ impl SensorReading {
         let mut output = String::new();
         let thresh_status = self.ipmi_sdr_get_thresh_status("na", ctx);
 
-    // 基本输出格式（完全匹配C版本列对齐）
+        // 基本输出格式（完全匹配C版本列对齐）
         let binding = String::from_utf8_lossy(&self.s_id);
         let sensor_name = binding.trim_matches('\0').trim();
         output.push_str(&format!("{:<16} ", sensor_name));
@@ -3157,31 +3102,31 @@ impl SensorReading {
     }
 }
 
-/// 获取SDR仓库信息，用于显示调试信息
-fn get_sdr_repository_info(
-    intf: &mut dyn IpmiIntf,
-) -> Result<crate::commands::sdr::types::SdrRepositoryInfo, crate::error::IpmiError> {
-    debug5!("Sending Get SDR Repository Info command");
+// 获取SDR仓库信息，用于显示调试信息
+// fn get_sdr_repository_info(
+//     intf: &mut dyn IpmiIntf,
+// ) -> Result<crate::commands::sdr::types::SdrRepositoryInfo, crate::error::IpmiError> {
+//     debug5!("Sending Get SDR Repository Info command");
 
-    let mut req = IpmiRq::default();
-    req.msg.netfn_mut(IPMI_NETFN_STORAGE);
-    req.msg.cmd = 0x20; // IPMI_GET_SDR_REPOSITORY_INFO
+//     let mut req = IpmiRq::default();
+//     req.msg.netfn_mut(IPMI_NETFN_STORAGE);
+//     req.msg.cmd = 0x20; // IPMI_GET_SDR_REPOSITORY_INFO
 
-    let rsp = intf
-        .sendrecv(&req)
-        .ok_or(crate::error::IpmiError::ResponseError)?;
+//     let rsp = intf
+//         .sendrecv(&req)
+//         .ok_or(crate::error::IpmiError::ResponseError)?;
 
-    if rsp.ccode != 0 {
-        debug5!(
-            "Get SDR Repository Info failed with completion code: 0x{:02x}",
-            rsp.ccode
-        );
-        return Err(crate::error::IpmiError::CompletionCode(rsp.ccode));
-    }
+//     if rsp.ccode != 0 {
+//         debug5!(
+//             "Get SDR Repository Info failed with completion code: 0x{:02x}",
+//             rsp.ccode
+//         );
+//         return Err(crate::error::IpmiError::CompletionCode(rsp.ccode));
+//     }
 
-    debug5!("Got SDR Repository Info response: {} bytes", rsp.data_len);
+//     debug5!("Got SDR Repository Info response: {} bytes", rsp.data_len);
 
-    crate::commands::sdr::types::SdrRepositoryInfo::from_response_data(
-        &rsp.data[..rsp.data_len as usize],
-    )
-}
+//     crate::commands::sdr::types::SdrRepositoryInfo::from_response_data(
+//         &rsp.data[..rsp.data_len as usize],
+//     )
+// }
