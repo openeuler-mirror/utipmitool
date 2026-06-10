@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-use crate::debug3;
-
 /// IPMI Context Module - 重构后的上下文管理
 ///
 /// 按照职责分离原则，将原来的IpmiContext拆分为多个专门的上下文结构
@@ -491,12 +489,12 @@ impl IpmiContext {
 
     /// 检查是否需要通过传感器桥接到目标
     pub fn bridge_to_sensor(&self, addr: u8, chan: u8) -> bool {
-        debug3!(
-            "intf target_ipmb_addr {:#x} intf target_addr{:#x} intf target_channel {:#x}",
-            self.base.target_ipmb_addr,
-            self.base.target_addr,
-            self.base.target_channel
-        );
+        // log_debug!(
+        //     "intf target_ipmb_addr {:#x} intf target_addr{:#x} intf target_channel {:#x}",
+        //     self.base.target_ipmb_addr,
+        //     self.base.target_addr,
+        //     self.base.target_channel
+        // );
         !((chan == 0 && self.base.target_ipmb_addr != 0 && self.base.target_ipmb_addr == addr)
             || (addr == self.base.target_addr as u8 && chan == self.base.target_channel))
     }
