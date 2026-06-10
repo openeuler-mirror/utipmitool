@@ -5,8 +5,9 @@
  */
 
 use crate::debug1;
-use crate::debug3;
 use crate::debug5;
+use crate::log_error;
+use crate::log_info;
 
 use crate::error::IpmiError;
 use crate::ipmi::intf::IpmiIntf;
@@ -92,9 +93,9 @@ pub fn vita_discover(intf: &mut dyn IpmiIntf) -> u8 {
 
     let ctx = intf.context();
 
-    // 避免在 sensor -vv 输出中重复刷屏，将探测日志提升到 debug3 级别；
+    // 避免在 sensor -vv 输出中重复刷屏，将探测日志提升到 log_info! 级别；
     // 初始化阶段的 -vv 日志由 open 接口负责输出
-    debug3!(
+    log_info!(
         "Running Get VSO Capabilities my_addr 0x{:02x}, transit {}, target {}",
         ctx.my_addr(),
         ctx.transit_addr(),
@@ -104,7 +105,10 @@ pub fn vita_discover(intf: &mut dyn IpmiIntf) -> u8 {
     match intf.sendrecv(&req) {
         Some(rsp) => {
             if rsp.ccode == 0xC1 {
-                debug3!("Invalid completion code received: Invalid command");
+                log_info!(
+                    "Invalid completion code received: {}",
+                    IpmiError::CompletionCode(rsp.ccode)
+                );
                 0
             } else if rsp.ccode == 0xCC {
                 debug5!(
@@ -144,7 +148,7 @@ pub fn vita_discover(intf: &mut dyn IpmiIntf) -> u8 {
             }
         }
         None => {
-            debug1!("No valid response received");
+            log_error!("No valid response received");
             0
         }
     }
