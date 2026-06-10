@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-use crate::error::{val2str, COMPLETION_CODE_VALS};
+use crate::error::completion_code_to_string;
 use crate::ipmi::intf::*;
 use crate::ipmi::ipmi::*;
 use crate::ipmi::strings::IPMI_CHASSIS_POWER_CONTROL_VALS;
@@ -22,7 +22,7 @@ pub fn ipmi_chassis_power_status(mut intf: Box<dyn IpmiIntf>) -> Result<bool, St
             if rsp.ccode != 0 {
                 Err(format!(
                     "Get Chassis Power Status failed: {}",
-                    val2str(rsp.ccode, &COMPLETION_CODE_VALS)
+                    completion_code_to_string(rsp.ccode)
                 ))
             } else {
                 Ok(rsp.data[0] & 1 != 0)
@@ -93,7 +93,7 @@ pub fn ipmi_chassis_power_control(mut intf: Box<dyn IpmiIntf>, ctl: u8) -> Resul
                 Err(format!(
                     "Set Chassis Power Control to {} failed: {}",
                     control_str,
-                    val2str(rsp.ccode, &COMPLETION_CODE_VALS),
+                    completion_code_to_string(rsp.ccode),
                 ))
             } else {
                 println!("Chassis Power Control: {}", control_str);
